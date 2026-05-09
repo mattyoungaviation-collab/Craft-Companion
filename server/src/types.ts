@@ -4,6 +4,7 @@ export type UserAccount = {
   craftWorldUid?: string;
   walletAddress?: string;
   primaryWalletAddress?: string;
+  craftWorldCustomToken?: string;
   craftWorldIdToken?: string;
   craftWorldRefreshToken?: string;
   craftWorldTokenExpiresAt?: string;
