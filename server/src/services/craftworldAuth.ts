@@ -15,6 +15,11 @@ function craftWorldHeaders() {
   };
 }
 
+function requireFirebaseApiKey() {
+  if (!firebaseApiKey) throw new Error('CRAFTWORLD_FIREBASE_API_KEY is not configured.');
+  return firebaseApiKey;
+}
+
 function orderAuthPayload(payload: CraftworldAuthPayload): CraftworldAuthPayload {
   return {
     domain: payload.domain,
@@ -62,13 +67,36 @@ export async function exchangeCraftworldCustomToken(customToken: string): Promis
   expiresIn: string;
   isNewUser: boolean;
 }> {
-  if (!firebaseApiKey) throw new Error('CRAFTWORLD_FIREBASE_API_KEY is not configured.');
+  const apiKey = requireFirebaseApiKey();
 
-  const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${firebaseApiKey}`, {
+  const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token: customToken, returnSecureToken: true }),
   });
 
   return readJson<{ idToken: string; refreshToken: string; expiresIn: string; isNewUser: boolean }>(res);
+}
+
+export async function refreshCraftworldIdToken(refreshToken: string): Promise<{
+  idToken: string;
+  refreshToken: string;
+  expiresIn: string;
+  userId: string;
+}> {
+  const apiKey = requireFirebaseApiKey();
+
+  const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }),
+  });
+
+  const data = await readJson<{ id_token: string; refresh_token: string; expires_in: string; user_id: string }>(res);
+  return {
+    idToken: data.id_token,
+    refreshToken: data.refresh_token,
+    expiresIn: data.expires_in,
+    userId: data.user_id,
+  };
 }
