@@ -10,6 +10,11 @@ type CraftworldGraphqlAttempt = {
   label: string;
 };
 
+type AttemptConfig = {
+  label: string;
+  headers: Record<string, string>;
+};
+
 async function requestHomeData(endpoint: string, craftWorldUserId: string, headers: Record<string, string>, label: string): Promise<CraftworldGraphqlAttempt> {
   const res = await fetch(endpoint, {
     method: 'POST',
@@ -51,7 +56,7 @@ export async function getCraftworldHomeData(craftWorldUserId: string, authToken?
   if (!token) return getMockCraftworldHomeData();
 
   const attempts: CraftworldGraphqlAttempt[] = [];
-  const attemptConfigs = [
+  const attemptConfigs: AttemptConfig[] = [
     { label: 'authorization-bearer', headers: { Authorization: `Bearer ${token}` } },
     { label: 'authorization-raw', headers: { Authorization: token } },
     { label: 'firebase-auth-bearer', headers: { FirebaseAuthToken: `Bearer ${token}` } },
