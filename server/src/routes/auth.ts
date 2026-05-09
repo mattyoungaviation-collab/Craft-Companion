@@ -6,6 +6,7 @@ import { getUsers, saveUsers } from '../storage/userStorage.js';
 import { createWalletNonce, consumeWalletNonce } from '../storage/walletNonceStorage.js';
 import {
   exchangeCraftworldCustomToken,
+  getCraftworldAccountIdentity,
   loginCraftworldWithSignedPayload,
   lookupCraftworldFirebaseAccount,
   requestCraftworldAuthPayload,
@@ -19,6 +20,7 @@ function safeUser(user: any) {
     username: user.username,
     craftWorldUserId: user.craftWorldUserId,
     craftWorldUid: user.craftWorldUid,
+    craftWorldFirebaseUserId: user.craftWorldFirebaseUserId,
     walletAddress: user.walletAddress,
     primaryWalletAddress: user.primaryWalletAddress,
     createdAt: user.createdAt,
@@ -33,6 +35,27 @@ function signAppToken(user: any) {
     secret,
     { expiresIn: '7d' },
   );
+}
+
+function isWalletAddress(value?: string) {
+  return /^0x[a-fA-F0-9]{40}$/.test(String(value || ''));
+}
+
+function asAccountId(value?: string) {
+  const clean = String(value || '').trim();
+  if (!clean || isWalletAddress(clean)) return '';
+  return clean;
+}
+
+function getCustomJwtUserId(account: any) {
+  const customJwt = account?.linkedAccounts?.find((linked: any) => linked?.type === 'custom_jwt');
+  return String(customJwt?.details?.user_id || customJwt?.details?.id || '').trim();
+}
+
+function getPrimaryWalletAddress(account: any, fallbackAddress = '') {
+  const primary = account?.wallets?.find((wallet: any) => wallet?.primary && wallet?.address)?.address;
+  const first = account?.wallets?.find((wallet: any) => wallet?.address)?.address;
+  return String(primary || first || fallbackAddress || '').toLowerCase();
 }
 
 authRouter.post('/register', async (req, res) => {
@@ -77,15 +100,29 @@ authRouter.post('/craftworld-wallet/login', async (req, res) => {
     const craftWorldAuth = await loginCraftworldWithSignedPayload(payload, String(signature));
     const firebaseAuth = await exchangeCraftworldCustomToken(craftWorldAuth.customToken);
     const firebaseAccount = await lookupCraftworldFirebaseAccount(firebaseAuth.idToken);
+    const account = await getCraftworldAccountIdentity(firebaseAuth.idToken);
 
-    const normalizedAddress = String(payload.address || '').toLowerCase();
-    const resolvedUid = firebaseAccount.localId || craftWorldAuth.uid;
+    const accountId = asAccountId(account.id);
+    const customJwtUserId = getCustomJwtUserId(account);
+    const walletAddress = getPrimaryWalletAddress(account, payload.address);
+
+    if (!accountId) return res.status(502).json({ message: 'Craft World account id was not returned.' });
+
+    console.log('Craft World wallet login identity', {
+      accountId,
+      customJwtUserId,
+      firebaseLocalId: firebaseAccount.localId,
+      craftWorldAuthUid: craftWorldAuth.uid,
+      walletAddress,
+    });
+
     const users = await getUsers();
     let user = users.find(
       (item) =>
-        item.craftWorldUid === resolvedUid ||
-        item.craftWorldUserId === resolvedUid ||
-        (normalizedAddress && item.walletAddress?.toLowerCase() === normalizedAddress),
+        item.craftWorldUid === accountId ||
+        item.craftWorldUserId === accountId ||
+        Boolean(customJwtUserId && item.craftWorldFirebaseUserId === customJwtUserId) ||
+        Boolean(walletAddress && item.walletAddress?.toLowerCase() === walletAddress),
     );
 
     const now = new Date().toISOString();
@@ -93,19 +130,21 @@ authRouter.post('/craftworld-wallet/login', async (req, res) => {
     if (!user) {
       user = {
         id: uuid(),
-        username: `wallet-${normalizedAddress.slice(2, 8) || 'craft'}`,
-        craftWorldUserId: resolvedUid,
-        craftWorldUid: resolvedUid,
-        walletAddress: normalizedAddress,
+        username: `wallet-${walletAddress.slice(2, 8) || 'craft'}`,
+        craftWorldUserId: accountId,
+        craftWorldUid: accountId,
+        craftWorldFirebaseUserId: customJwtUserId,
+        walletAddress,
         passwordHash: '',
         createdAt: now,
       };
       users.push(user);
     }
 
-    user.craftWorldUid = resolvedUid;
-    user.craftWorldUserId = resolvedUid;
-    user.walletAddress = normalizedAddress;
+    user.craftWorldUid = accountId;
+    user.craftWorldUserId = accountId;
+    user.craftWorldFirebaseUserId = customJwtUserId;
+    user.walletAddress = walletAddress;
     user.craftWorldCustomToken = craftWorldAuth.customToken;
     user.craftWorldIdToken = firebaseAuth.idToken;
     user.craftWorldRefreshToken = firebaseAuth.refreshToken;
