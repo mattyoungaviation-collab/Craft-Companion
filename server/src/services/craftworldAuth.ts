@@ -1,24 +1,17 @@
-import { CraftworldAccountIdentity, CraftworldAuthPayload } from '../types.js';
+import { CraftworldAccountIdentity } from '../types.js';
 
 const craftWorldBaseUrl = process.env.CRAFTWORLD_BASE_URL || 'https://craft-world.gg';
+const craftWorldGraphqlUrl = process.env.CRAFTWORLD_GRAPHQL_ENDPOINT || `${craftWorldBaseUrl}/graphql`;
 const firebaseApiKey = process.env.CRAFTWORLD_FIREBASE_API_KEY;
-const thirdwebAccountsUrl = process.env.THIRDWEB_ACCOUNTS_URL || 'https://embedded-wallet.thirdweb.com/api/2024-05-05/accounts';
 
-function craftWorldHeaders() {
+function craftWorldHeaders(extra: Record<string, string> = {}) {
   return {
-    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Type': 'application/json',
     Accept: '*/*',
     Origin: 'https://craft-world.gg',
     Referer: 'https://craft-world.gg/',
-    'x-bundle-id': process.env.CRAFTWORLD_BUNDLE_ID || 'com.angrydynomiteslab.craftworld',
-    'x-client-id': process.env.CRAFTWORLD_CLIENT_ID || '25bc35076e7821aa8a5779982e2d04b2',
-    'x-sdk-name': process.env.CRAFTWORLD_SDK_NAME || 'UnitySDK_WebGL',
-    'x-sdk-os': process.env.CRAFTWORLD_SDK_OS || 'WebGLPlayer',
-    'x-sdk-platform': process.env.CRAFTWORLD_SDK_PLATFORM || 'unity',
-    'x-sdk-version': process.env.CRAFTWORLD_SDK_VERSION || '6.1.1',
-    'x-embedded-wallet-version': process.env.CRAFTWORLD_EMBEDDED_WALLET_VERSION || 'unity:6.1.1',
-    'x-thirdweb-client-id': process.env.CRAFTWORLD_CLIENT_ID || '25bc35076e7821aa8a5779982e2d04b2',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
+    'x-app-version': process.env.CRAFTWORLD_APP_VERSION || '1.10.1',
+    ...extra,
   };
 }
 
@@ -27,18 +20,12 @@ function requireFirebaseApiKey() {
   return firebaseApiKey;
 }
 
-function orderAuthPayload(payload: CraftworldAuthPayload): CraftworldAuthPayload {
-  return {
-    domain: payload.domain,
-    address: payload.address,
-    statement: payload.statement,
-    uri: payload.uri,
-    version: payload.version,
-    chain_id: payload.chain_id,
-    nonce: payload.nonce,
-    issued_at: payload.issued_at,
-    expiration_time: payload.expiration_time,
-  };
+function normalizeCraftworldToken(token?: string) {
+  const value = String(token || '').trim();
+  if (!value) return '';
+  if (value.startsWith('jwt_')) return value;
+  if (value.split('.').length >= 3) return `jwt_${value}`;
+  return value;
 }
 
 async function readJson<T>(res: Response): Promise<T> {
@@ -55,25 +42,51 @@ async function readJson<T>(res: Response): Promise<T> {
   return raw as T;
 }
 
-export async function requestCraftworldAuthPayload(address: string, chainId = '2020'): Promise<CraftworldAuthPayload> {
-  const res = await fetch(`${craftWorldBaseUrl}/auth/payload`, {
+async function craftworldGraphql<T>(query: string, variables?: Record<string, unknown>, bearerToken?: string): Promise<T> {
+  const token = normalizeCraftworldToken(bearerToken);
+  const res = await fetch(craftWorldGraphqlUrl, {
     method: 'POST',
-    headers: craftWorldHeaders(),
-    body: JSON.stringify({ address, chainId }),
+    headers: craftWorldHeaders(token ? { Authorization: `Bearer ${token}` } : {}),
+    body: JSON.stringify({ query, ...(variables ? { variables } : {}) }),
   });
 
-  const data = await readJson<{ payload: CraftworldAuthPayload }>(res);
-  return data.payload;
+  const raw = await readJson<any>(res);
+  if (raw.errors?.length) throw new Error(raw.errors[0]?.message || 'Craft World GraphQL error.');
+  return raw.data as T;
 }
 
-export async function loginCraftworldWithSignedPayload(payload: CraftworldAuthPayload, signature: string): Promise<{ customToken: string; uid: string }> {
-  const res = await fetch(`${craftWorldBaseUrl}/auth/login`, {
-    method: 'POST',
-    headers: craftWorldHeaders(),
-    body: JSON.stringify({ payload: { Payload: orderAuthPayload(payload), Signature: signature } }),
-  });
+export async function requestCraftworldAuthPayload(address: string): Promise<{ walletAddress: string; nonce: string }> {
+  const query = `
+    query($walletAddress: String!) {
+      getNonce(walletAddress: $walletAddress) { nonce }
+    }
+  `;
 
-  return readJson<{ customToken: string; uid: string }>(res);
+  const data = await craftworldGraphql<{ getNonce?: { nonce?: string } | string }>(query, { walletAddress: address });
+  const noncePayload = data.getNonce;
+  const nonce = typeof noncePayload === 'string' ? noncePayload : noncePayload?.nonce;
+  if (!nonce) throw new Error('Craft World nonce was not returned.');
+  return { walletAddress: address, nonce };
+}
+
+export async function loginCraftworldWithSignedPayload(payload: any, signature: string): Promise<{ customToken: string; uid: string }> {
+  const walletAddress = String(payload?.walletAddress || payload?.address || '').trim();
+  if (!walletAddress) throw new Error('Wallet address is required for Craft World login.');
+
+  const mutation = `
+    mutation LoginForCustomToken($signature: String!, $walletAddress: String!) {
+      loginForCustomToken(signature: $signature, walletAddress: $walletAddress) { customToken }
+    }
+  `;
+
+  const data = await craftworldGraphql<{ loginForCustomToken?: { customToken?: string } | string }>(mutation, {
+    signature,
+    walletAddress,
+  });
+  const tokenPayload = data.loginForCustomToken;
+  const customToken = typeof tokenPayload === 'string' ? tokenPayload : tokenPayload?.customToken;
+  if (!customToken) throw new Error('Craft World custom token was not returned.');
+  return { customToken, uid: '' };
 }
 
 export async function exchangeCraftworldCustomToken(customToken: string): Promise<{
@@ -86,7 +99,7 @@ export async function exchangeCraftworldCustomToken(customToken: string): Promis
 
   const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${apiKey}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Origin: 'https://craft-world.gg' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token: customToken, returnSecureToken: true }),
   });
 
@@ -98,7 +111,7 @@ export async function lookupCraftworldFirebaseAccount(idToken: string): Promise<
 
   const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Origin: 'https://craft-world.gg' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ idToken }),
   });
 
@@ -106,21 +119,23 @@ export async function lookupCraftworldFirebaseAccount(idToken: string): Promise<
   return data.users?.[0] || {};
 }
 
-export async function getCraftworldAccountIdentity(embeddedWalletSession?: string): Promise<CraftworldAccountIdentity | null> {
-  if (!embeddedWalletSession) return null;
-  const authorization = embeddedWalletSession.startsWith('Bearer ')
-    ? embeddedWalletSession
-    : `Bearer ${embeddedWalletSession}`;
+export async function getCraftworldAccountIdentity(idToken?: string, fallbackWalletAddress = ''): Promise<CraftworldAccountIdentity | null> {
+  if (!idToken) return null;
 
-  const res = await fetch(thirdwebAccountsUrl, {
-    method: 'GET',
-    headers: {
-      ...craftWorldHeaders(),
-      Authorization: authorization,
-    },
-  });
+  const query = `
+    query AccountUID {
+      account { id }
+    }
+  `;
 
-  return readJson<CraftworldAccountIdentity>(res);
+  const data = await craftworldGraphql<{ account?: { id?: string } }>(query, undefined, idToken);
+  const accountId = String(data.account?.id || '').trim();
+  if (!accountId) return null;
+
+  return {
+    id: accountId,
+    wallets: fallbackWalletAddress ? [{ address: fallbackWalletAddress }] : [],
+  };
 }
 
 export async function refreshCraftworldIdToken(refreshToken: string): Promise<{
@@ -133,7 +148,7 @@ export async function refreshCraftworldIdToken(refreshToken: string): Promise<{
 
   const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${apiKey}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'https://craft-world.gg' },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }),
   });
 
