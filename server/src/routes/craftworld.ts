@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getUsers, saveUsers } from '../storage/userStorage.js';
 import { getCraftworldHomeData } from '../services/craftworldGraphql.js';
 import { getCraftworldProfileByUid, getCraftworldWallets } from '../services/craftworldIdentity.js';
+import { getMockCraftworldHomeData } from '../services/mockCraftworldData.js';
 import {
   exchangeCraftworldCustomToken,
   loginCraftworldWithSignedPayload,
@@ -29,6 +30,26 @@ async function getFreshCraftworldTokens(user: any) {
   return [user.craftWorldIdToken, user.craftWorldCustomToken, process.env.CRAFTWORLD_AUTH_TOKEN].filter(Boolean) as string[];
 }
 
+async function getPublicProfileHomeFallback(uid: string) {
+  const home = getMockCraftworldHomeData();
+  if (!uid) return home;
+
+  try {
+    const profile = await getCraftworldProfileByUid(uid);
+    home.profile = {
+      uid: profile.uid,
+      displayName: profile.displayName,
+      avatarUrl: profile.avatarUrl,
+      walletAddress: profile.walletAddress,
+    };
+    home.account.walletAddress = profile.walletAddress;
+  } catch {
+    home.profile = { uid };
+  }
+
+  return home;
+}
+
 craftworldRouter.get('/home', async (req: any, res) => {
   const users = await getUsers();
   const user = users.find((u) => u.id === req.user?.id);
@@ -40,7 +61,9 @@ craftworldRouter.get('/home', async (req: any, res) => {
     const data = await getCraftworldHomeData(uid || '', tokens);
     res.json(data);
   } catch (error: any) {
-    res.status(502).json({ message: error.message || 'Unable to load Craft World home data.' });
+    console.error('Protected Craft World home failed, returning public profile fallback', error.message);
+    const fallback = await getPublicProfileHomeFallback(uid || '');
+    res.json(fallback);
   }
 });
 
