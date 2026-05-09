@@ -15,12 +15,22 @@ type AttemptConfig = {
   headers: Record<string, string>;
 };
 
+function browserLikeHeaders() {
+  return {
+    Accept: '*/*',
+    Origin: 'https://craft-world.gg',
+    Referer: 'https://craft-world.gg/',
+    'x-app-version': process.env.CRAFTWORLD_APP_VERSION || '1.10.1',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
+  };
+}
+
 async function requestHomeData(endpoint: string, craftWorldUserId: string, headers: Record<string, string>, label: string): Promise<CraftworldGraphqlAttempt> {
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-app-version': process.env.CRAFTWORLD_APP_VERSION || '1.10.1',
+      ...browserLikeHeaders(),
       ...headers,
     },
     body: JSON.stringify({ query, variables: { craftWorldUserId } }),
@@ -63,9 +73,14 @@ export async function getCraftworldHomeData(craftWorldUserId: string, authTokens
   const fallbackToken = process.env.CRAFTWORLD_AUTH_TOKEN;
   const tokens = (Array.isArray(authTokens) ? authTokens : [authTokens || fallbackToken]).filter(Boolean) as string[];
   const endpoint = process.env.CRAFTWORLD_GRAPHQL_ENDPOINT || 'https://craft-world.gg/graphql';
-  if (!tokens.length) return getMockCraftworldHomeData();
 
   const attempts: CraftworldGraphqlAttempt[] = [];
+
+  const noAuthAttempt = await requestHomeData(endpoint, craftWorldUserId, {}, 'browser-like-no-auth');
+  attempts.push(noAuthAttempt);
+  if (noAuthAttempt.res.ok && !noAuthAttempt.raw.errors) return normalizeCraftworldHomeData(noAuthAttempt.raw);
+
+  if (!tokens.length) return getMockCraftworldHomeData();
 
   for (const [tokenIndex, token] of tokens.entries()) {
     const attemptConfigs = buildAttemptConfigs(token, `token-${tokenIndex + 1}`);
