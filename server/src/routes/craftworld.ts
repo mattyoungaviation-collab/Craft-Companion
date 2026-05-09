@@ -5,6 +5,7 @@ import { getCraftworldProfileByUid, getCraftworldWallets } from '../services/cra
 import {
   exchangeCraftworldCustomToken,
   loginCraftworldWithSignedPayload,
+  lookupCraftworldFirebaseAccount,
   refreshCraftworldIdToken,
   requestCraftworldAuthPayload,
 } from '../services/craftworldAuth.js';
@@ -84,14 +85,15 @@ craftworldRouter.post('/auth/login', async (req: any, res) => {
   try {
     const craftWorldAuth = await loginCraftworldWithSignedPayload(payload, String(signature));
     const firebaseAuth = await exchangeCraftworldCustomToken(craftWorldAuth.customToken);
+    const firebaseAccount = await lookupCraftworldFirebaseAccount(firebaseAuth.idToken);
 
     const users = await getUsers();
     const user = users.find((u) => u.id === req.user?.id);
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
     const expiresInMs = Number(firebaseAuth.expiresIn || 3600) * 1000;
-    user.craftWorldUid = craftWorldAuth.uid;
-    user.craftWorldUserId = craftWorldAuth.uid;
+    user.craftWorldUid = firebaseAccount.localId || craftWorldAuth.uid;
+    user.craftWorldUserId = firebaseAccount.localId || craftWorldAuth.uid;
     user.walletAddress = payload.address;
     user.craftWorldCustomToken = craftWorldAuth.customToken;
     user.craftWorldIdToken = firebaseAuth.idToken;
@@ -101,7 +103,7 @@ craftworldRouter.post('/auth/login', async (req: any, res) => {
     await saveUsers(users);
 
     res.json({
-      uid: craftWorldAuth.uid,
+      uid: user.craftWorldUid,
       walletAddress: user.walletAddress,
       expiresAt: user.craftWorldTokenExpiresAt,
       isNewUser: firebaseAuth.isNewUser,
