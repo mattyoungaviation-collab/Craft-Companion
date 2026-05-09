@@ -2,6 +2,7 @@ export type UserAccount = {
   id: string;
   craftWorldUserId: string;
   craftWorldUid?: string;
+  craftWorldAccountId?: string;
   craftWorldFirebaseUserId?: string;
   walletAddress?: string;
   primaryWalletAddress?: string;
