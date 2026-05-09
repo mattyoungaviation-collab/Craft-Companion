@@ -51,15 +51,21 @@ function formatCraftWorldSignMessage(payload: CraftWorldPayload) {
   ].join('\n');
 }
 
-function findThirdwebSessionToken() {
+function extractThirdwebSession(value: string) {
   const marker = 'embedded-wallet-token:';
+  const start = value.indexOf(marker);
+  if (start === -1) return undefined;
+  return value.slice(start).match(/embedded-wallet-token:[^"\\\s]+/)?.[0];
+}
+
+function findThirdwebSessionToken() {
   const storages = [window.localStorage, window.sessionStorage];
   for (const storage of storages) {
     for (let i = 0; i < storage.length; i += 1) {
       const key = storage.key(i);
       if (!key) continue;
-      const value = storage.getItem(key);
-      if (value && value.includes(marker)) return value;
+      const session = extractThirdwebSession(storage.getItem(key) || '');
+      if (session) return session;
     }
   }
   return undefined;
@@ -96,11 +102,14 @@ export default function SignIn() {
       const craftWorldMessage = formatCraftWorldSignMessage(craftWorldPayload.payload);
       const craftWorldSignature = await provider.request({ method: 'personal_sign', params: [craftWorldMessage, address] });
 
+      const thirdwebSession = findThirdwebSessionToken();
+      if (!thirdwebSession) throw new Error('Craft World embedded wallet session was not found. Open Craft World in this browser first, then try again.');
+
       setWalletStatus('Connecting Craft World account...');
       await craftWorldWalletLogin({
         payload: craftWorldPayload.payload,
         signature: craftWorldSignature,
-        thirdwebSession: findThirdwebSessionToken(),
+        thirdwebSession,
       });
 
       nav('/home');
