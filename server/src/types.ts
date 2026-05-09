@@ -2,6 +2,7 @@ export type UserAccount = {
   id: string;
   craftWorldUserId: string;
   craftWorldUid?: string;
+  craftWorldFirebaseUserId?: string;
   walletAddress?: string;
   primaryWalletAddress?: string;
   craftWorldCustomToken?: string;
@@ -97,6 +98,25 @@ export type CraftworldAuthPayload = {
   issued_at: string;
   expiration_time: string;
   chain_id: string;
+};
+
+export type CraftworldAccountIdentity = {
+  id?: string;
+  linkedAccounts?: Array<{
+    type?: string;
+    details?: {
+      id?: string;
+      user_id?: string;
+      provider_id?: string;
+      authProviderId?: string;
+    };
+  }>;
+  wallets?: Array<{
+    address?: string;
+    createdAt?: string;
+    type?: string;
+    primary?: boolean;
+  }>;
 };
 
 export type AuthUserPayload = { id: string; username: string; craftWorldUserId: string; craftWorldUid?: string };
