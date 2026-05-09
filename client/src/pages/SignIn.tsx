@@ -1,11 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  createWalletNonce,
-  finishCraftworldAuthLogin,
+  craftWorldWalletLogin,
   getCraftworldAuthPayload,
   login,
-  walletLogin,
 } from '../services/api';
 
 declare global {
@@ -75,11 +73,6 @@ export default function SignIn() {
       const address = accounts?.[0];
       if (!address) throw new Error('No wallet address was returned.');
 
-      setWalletStatus('Signing into Craft Companion...');
-      const nonce = await createWalletNonce({ address });
-      const signature = await provider.request({ method: 'personal_sign', params: [nonce.message, address] });
-      await walletLogin({ address, message: nonce.message, signature });
-
       setWalletStatus('Preparing Craft World login payload...');
       const chainIdHex = await provider.request({ method: 'eth_chainId' }).catch(() => null);
       const chainId = chainIdHex ? String(Number(chainIdHex)) : '2020';
@@ -90,7 +83,7 @@ export default function SignIn() {
       const craftWorldSignature = await provider.request({ method: 'personal_sign', params: [craftWorldMessage, address] });
 
       setWalletStatus('Connecting Craft World account...');
-      await finishCraftworldAuthLogin({ payload: craftWorldPayload.payload, signature: craftWorldSignature });
+      await craftWorldWalletLogin({ payload: craftWorldPayload.payload, signature: craftWorldSignature });
 
       nav('/home');
     } catch (err: any) {
