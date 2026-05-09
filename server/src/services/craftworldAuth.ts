@@ -6,12 +6,16 @@ const firebaseApiKey = process.env.CRAFTWORLD_FIREBASE_API_KEY;
 function craftWorldHeaders() {
   return {
     'Content-Type': 'application/json; charset=utf-8',
+    Accept: '*/*',
+    Origin: 'https://craft-world.gg',
+    Referer: 'https://craft-world.gg/',
     'x-bundle-id': process.env.CRAFTWORLD_BUNDLE_ID || 'com.angrydynomiteslab.craftworld',
     'x-client-id': process.env.CRAFTWORLD_CLIENT_ID || '25bc35076e7821aa8a5779982e2d04b2',
     'x-sdk-name': process.env.CRAFTWORLD_SDK_NAME || 'UnitySDK_WebGL',
     'x-sdk-os': process.env.CRAFTWORLD_SDK_OS || 'WebGLPlayer',
     'x-sdk-platform': process.env.CRAFTWORLD_SDK_PLATFORM || 'unity',
     'x-sdk-version': process.env.CRAFTWORLD_SDK_VERSION || '6.1.1',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
   };
 }
 
@@ -71,7 +75,7 @@ export async function exchangeCraftworldCustomToken(customToken: string): Promis
 
   const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${apiKey}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Origin: 'https://craft-world.gg' },
     body: JSON.stringify({ token: customToken, returnSecureToken: true }),
   });
 
@@ -83,7 +87,7 @@ export async function lookupCraftworldFirebaseAccount(idToken: string): Promise<
 
   const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Origin: 'https://craft-world.gg' },
     body: JSON.stringify({ idToken }),
   });
 
@@ -101,7 +105,7 @@ export async function refreshCraftworldIdToken(refreshToken: string): Promise<{
 
   const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${apiKey}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'https://craft-world.gg' },
     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }),
   });
 
