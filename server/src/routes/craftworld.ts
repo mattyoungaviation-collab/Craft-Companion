@@ -11,20 +11,21 @@ import {
 
 export const craftworldRouter = Router();
 
-async function getFreshCraftworldToken(user: any) {
-  if (!user) return process.env.CRAFTWORLD_AUTH_TOKEN;
+async function getFreshCraftworldTokens(user: any) {
+  if (!user) return [process.env.CRAFTWORLD_AUTH_TOKEN].filter(Boolean) as string[];
 
   const expiresAt = user.craftWorldTokenExpiresAt ? new Date(user.craftWorldTokenExpiresAt).getTime() : 0;
   const shouldRefresh = Boolean(user.craftWorldRefreshToken && (!user.craftWorldIdToken || expiresAt < Date.now() + 2 * 60 * 1000));
 
-  if (!shouldRefresh) return user.craftWorldIdToken || process.env.CRAFTWORLD_AUTH_TOKEN;
+  if (shouldRefresh) {
+    const refreshed = await refreshCraftworldIdToken(user.craftWorldRefreshToken);
+    const expiresInMs = Number(refreshed.expiresIn || 3600) * 1000;
+    user.craftWorldIdToken = refreshed.idToken;
+    user.craftWorldRefreshToken = refreshed.refreshToken;
+    user.craftWorldTokenExpiresAt = new Date(Date.now() + expiresInMs).toISOString();
+  }
 
-  const refreshed = await refreshCraftworldIdToken(user.craftWorldRefreshToken);
-  const expiresInMs = Number(refreshed.expiresIn || 3600) * 1000;
-  user.craftWorldIdToken = refreshed.idToken;
-  user.craftWorldRefreshToken = refreshed.refreshToken;
-  user.craftWorldTokenExpiresAt = new Date(Date.now() + expiresInMs).toISOString();
-  return user.craftWorldIdToken;
+  return [user.craftWorldIdToken, user.craftWorldCustomToken, process.env.CRAFTWORLD_AUTH_TOKEN].filter(Boolean) as string[];
 }
 
 craftworldRouter.get('/home', async (req: any, res) => {
@@ -33,9 +34,9 @@ craftworldRouter.get('/home', async (req: any, res) => {
   const uid = user?.craftWorldUid || user?.craftWorldUserId || req.user.craftWorldUid || req.user.craftWorldUserId;
 
   try {
-    const token = await getFreshCraftworldToken(user);
+    const tokens = await getFreshCraftworldTokens(user);
     if (user) await saveUsers(users);
-    const data = await getCraftworldHomeData(uid || '', token);
+    const data = await getCraftworldHomeData(uid || '', tokens);
     res.json(data);
   } catch (error: any) {
     res.status(502).json({ message: error.message || 'Unable to load Craft World home data.' });
@@ -92,6 +93,7 @@ craftworldRouter.post('/auth/login', async (req: any, res) => {
     user.craftWorldUid = craftWorldAuth.uid;
     user.craftWorldUserId = craftWorldAuth.uid;
     user.walletAddress = payload.address;
+    user.craftWorldCustomToken = craftWorldAuth.customToken;
     user.craftWorldIdToken = firebaseAuth.idToken;
     user.craftWorldRefreshToken = firebaseAuth.refreshToken;
     user.craftWorldTokenExpiresAt = new Date(Date.now() + expiresInMs).toISOString();
