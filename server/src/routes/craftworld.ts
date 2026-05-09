@@ -5,6 +5,7 @@ import { getCraftworldProfileByUid, getCraftworldWallets } from '../services/cra
 import { getMockCraftworldHomeData } from '../services/mockCraftworldData.js';
 import {
   exchangeCraftworldCustomToken,
+  getCraftworldAccountIdentity,
   loginCraftworldWithSignedPayload,
   lookupCraftworldFirebaseAccount,
   refreshCraftworldIdToken,
@@ -12,6 +13,23 @@ import {
 } from '../services/craftworldAuth.js';
 
 export const craftworldRouter = Router();
+
+function getPrimaryWalletAddress(account: any, fallbackAddress = '') {
+  const wallets = Array.isArray(account?.wallets) ? account.wallets : [];
+
+  const primary = wallets.find((wallet: any) => wallet?.primary && wallet?.address)?.address;
+
+  const nonJwt = wallets.find(
+    (wallet: any) =>
+      wallet?.address &&
+      String(wallet?.provider || '').toLowerCase() !== 'jwt' &&
+      String(wallet?.providerId || '').toLowerCase() !== 'inappwallet',
+  )?.address;
+
+  const first = wallets.find((wallet: any) => wallet?.address)?.address;
+
+  return String(primary || nonJwt || first || fallbackAddress || '').toLowerCase();
+}
 
 async function getFreshCraftworldTokens(user: any) {
   if (!user) return [process.env.CRAFTWORLD_AUTH_TOKEN].filter(Boolean) as string[];
@@ -109,6 +127,7 @@ craftworldRouter.post('/auth/login', async (req: any, res) => {
     const craftWorldAuth = await loginCraftworldWithSignedPayload(payload, String(signature));
     const firebaseAuth = await exchangeCraftworldCustomToken(craftWorldAuth.customToken);
     const firebaseAccount = await lookupCraftworldFirebaseAccount(firebaseAuth.idToken);
+    const account = await getCraftworldAccountIdentity(firebaseAuth.idToken, payload.walletAddress || payload.address || '');
 
     const users = await getUsers();
     const user = users.find((u) => u.id === req.user?.id);
@@ -117,7 +136,7 @@ craftworldRouter.post('/auth/login', async (req: any, res) => {
     const expiresInMs = Number(firebaseAuth.expiresIn || 3600) * 1000;
     user.craftWorldUid = firebaseAccount.localId || craftWorldAuth.uid;
     user.craftWorldUserId = firebaseAccount.localId || craftWorldAuth.uid;
-    user.walletAddress = payload.address;
+    user.walletAddress = getPrimaryWalletAddress(account, payload.walletAddress || payload.address || '');
     user.craftWorldCustomToken = craftWorldAuth.customToken;
     user.craftWorldIdToken = firebaseAuth.idToken;
     user.craftWorldRefreshToken = firebaseAuth.refreshToken;

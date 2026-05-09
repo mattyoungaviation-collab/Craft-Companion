@@ -123,18 +123,34 @@ export async function getCraftworldAccountIdentity(idToken?: string, fallbackWal
   if (!idToken) return null;
 
   const query = `
-    query AccountUID {
-      account { id }
+    query AccountIdentity {
+      account {
+        id
+        wallets {
+          address
+          type
+          provider
+          providerId
+          primary
+        }
+      }
     }
   `;
 
-  const data = await craftworldGraphql<{ account?: { id?: string } }>(query, undefined, idToken);
+  const data = await craftworldGraphql<{
+    account?: {
+      id?: string;
+      wallets?: Array<{ address?: string; type?: string; provider?: string | null; providerId?: string | null; primary?: boolean }>;
+    };
+  }>(query, undefined, idToken);
   const accountId = String(data.account?.id || '').trim();
   if (!accountId) return null;
 
+  const wallets = Array.isArray(data.account?.wallets) ? data.account?.wallets || [] : [];
+
   return {
     id: accountId,
-    wallets: fallbackWalletAddress ? [{ address: fallbackWalletAddress }] : [],
+    wallets: wallets.length ? wallets : fallbackWalletAddress ? [{ address: fallbackWalletAddress }] : [],
   };
 }
 

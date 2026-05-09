@@ -48,9 +48,20 @@ function getCustomJwtUserId(account: any, fallback = '') {
 }
 
 function getPrimaryWalletAddress(account: any, fallbackAddress = '') {
-  const primary = account?.wallets?.find((wallet: any) => wallet?.primary && wallet?.address)?.address;
-  const first = account?.wallets?.find((wallet: any) => wallet?.address)?.address;
-  return String(primary || first || fallbackAddress || '').toLowerCase();
+  const wallets = Array.isArray(account?.wallets) ? account.wallets : [];
+
+  const primary = wallets.find((wallet: any) => wallet?.primary && wallet?.address)?.address;
+
+  const nonJwt = wallets.find(
+    (wallet: any) =>
+      wallet?.address &&
+      String(wallet?.provider || '').toLowerCase() !== 'jwt' &&
+      String(wallet?.providerId || '').toLowerCase() !== 'inappwallet',
+  )?.address;
+
+  const first = wallets.find((wallet: any) => wallet?.address)?.address;
+
+  return String(primary || nonJwt || first || fallbackAddress || '').toLowerCase();
 }
 
 authRouter.post('/register', async (req, res) => {
