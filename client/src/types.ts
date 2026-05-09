@@ -5,6 +5,7 @@ export type Me = {
   craftWorldUserId: string;
   craftWorldUid?: string;
   craftWorldFirebaseUserId?: string;
+  craftWorldAccountId?: string;
   walletAddress?: string;
   primaryWalletAddress?: string;
   username: string;
