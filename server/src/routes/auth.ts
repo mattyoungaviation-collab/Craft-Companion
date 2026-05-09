@@ -2,9 +2,33 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { v4 as uuid } from 'uuid';
+import { verifyMessage } from 'ethers';
 import { getUsers, saveUsers } from '../storage/userStorage.js';
+import { createWalletNonce, consumeWalletNonce } from '../storage/walletNonceStorage.js';
 
 export const authRouter = Router();
+
+function safeUser(user: any) {
+  return {
+    id: user.id,
+    username: user.username,
+    craftWorldUserId: user.craftWorldUserId,
+    craftWorldUid: user.craftWorldUid,
+    walletAddress: user.walletAddress,
+    primaryWalletAddress: user.primaryWalletAddress,
+    createdAt: user.createdAt,
+    lastLoginAt: user.lastLoginAt,
+  };
+}
+
+function signAppToken(user: any) {
+  const secret = process.env.JWT_SECRET || 'replace_me';
+  return jwt.sign(
+    { id: user.id, username: user.username, craftWorldUserId: user.craftWorldUserId, craftWorldUid: user.craftWorldUid },
+    secret,
+    { expiresIn: '7d' },
+  );
+}
 
 authRouter.post('/register', async (req, res) => {
   const { craftWorldUserId, username, password } = req.body ?? {};
@@ -25,7 +49,52 @@ authRouter.post('/login', async (req, res) => {
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) return res.status(401).json({ message: 'Invalid credentials.' });
   user.lastLoginAt = new Date().toISOString();
   await saveUsers(users);
-  const secret = process.env.JWT_SECRET || 'replace_me';
-  const token = jwt.sign({ id: user.id, username: user.username, craftWorldUserId: user.craftWorldUserId }, secret, { expiresIn: '7d' });
-  res.json({ token, user: { id: user.id, username: user.username, craftWorldUserId: user.craftWorldUserId, createdAt: user.createdAt, lastLoginAt: user.lastLoginAt } });
+  res.json({ token: signAppToken(user), user: safeUser(user) });
+});
+
+authRouter.post('/wallet/nonce', async (req, res) => {
+  const { address } = req.body ?? {};
+  if (!address) return res.status(400).json({ message: 'Wallet address is required.' });
+  const nonce = await createWalletNonce(String(address));
+  res.json({ address: nonce.address, message: nonce.message, expiresAt: nonce.expiresAt });
+});
+
+authRouter.post('/wallet/login', async (req, res) => {
+  const { address, message, signature } = req.body ?? {};
+  if (!address || !message || !signature) return res.status(400).json({ message: 'Address, message, and signature are required.' });
+
+  const nonce = await consumeWalletNonce(String(address), String(message));
+  if (!nonce) return res.status(401).json({ message: 'Login message is invalid or expired.' });
+
+  let recoveredAddress = '';
+  try {
+    recoveredAddress = verifyMessage(String(message), String(signature));
+  } catch {
+    return res.status(401).json({ message: 'Invalid wallet signature.' });
+  }
+
+  const normalizedAddress = String(address).toLowerCase();
+  if (recoveredAddress.toLowerCase() !== normalizedAddress) return res.status(401).json({ message: 'Signature does not match wallet address.' });
+
+  const users = await getUsers();
+  let user = users.find((item) => item.walletAddress?.toLowerCase() === normalizedAddress);
+  const now = new Date().toISOString();
+
+  if (!user) {
+    user = {
+      id: uuid(),
+      username: `wallet-${normalizedAddress.slice(2, 8)}`,
+      craftWorldUserId: '',
+      walletAddress: normalizedAddress,
+      passwordHash: '',
+      createdAt: now,
+    };
+    users.push(user);
+  }
+
+  user.walletAddress = normalizedAddress;
+  user.lastLoginAt = now;
+  await saveUsers(users);
+
+  res.json({ token: signAppToken(user), user: safeUser(user) });
 });
