@@ -5,17 +5,36 @@ import { getCraftworldProfileByUid, getCraftworldWallets } from '../services/cra
 import {
   exchangeCraftworldCustomToken,
   loginCraftworldWithSignedPayload,
+  refreshCraftworldIdToken,
   requestCraftworldAuthPayload,
 } from '../services/craftworldAuth.js';
 
 export const craftworldRouter = Router();
 
+async function getFreshCraftworldToken(user: any) {
+  if (!user) return process.env.CRAFTWORLD_AUTH_TOKEN;
+
+  const expiresAt = user.craftWorldTokenExpiresAt ? new Date(user.craftWorldTokenExpiresAt).getTime() : 0;
+  const shouldRefresh = Boolean(user.craftWorldRefreshToken && (!user.craftWorldIdToken || expiresAt < Date.now() + 2 * 60 * 1000));
+
+  if (!shouldRefresh) return user.craftWorldIdToken || process.env.CRAFTWORLD_AUTH_TOKEN;
+
+  const refreshed = await refreshCraftworldIdToken(user.craftWorldRefreshToken);
+  const expiresInMs = Number(refreshed.expiresIn || 3600) * 1000;
+  user.craftWorldIdToken = refreshed.idToken;
+  user.craftWorldRefreshToken = refreshed.refreshToken;
+  user.craftWorldTokenExpiresAt = new Date(Date.now() + expiresInMs).toISOString();
+  return user.craftWorldIdToken;
+}
+
 craftworldRouter.get('/home', async (req: any, res) => {
-  const user = (await getUsers()).find((u) => u.id === req.user?.id);
+  const users = await getUsers();
+  const user = users.find((u) => u.id === req.user?.id);
   const uid = user?.craftWorldUid || user?.craftWorldUserId || req.user.craftWorldUid || req.user.craftWorldUserId;
-  const token = user?.craftWorldIdToken || process.env.CRAFTWORLD_AUTH_TOKEN;
 
   try {
+    const token = await getFreshCraftworldToken(user);
+    if (user) await saveUsers(users);
     const data = await getCraftworldHomeData(uid || '', token);
     res.json(data);
   } catch (error: any) {
