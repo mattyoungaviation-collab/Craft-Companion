@@ -1,4 +1,4 @@
-import { CraftworldAuthPayload } from '../types.js';
+import { CraftworldAccountIdentity, CraftworldAuthPayload } from '../types.js';
 
 const craftWorldBaseUrl = process.env.CRAFTWORLD_BASE_URL || 'https://craft-world.gg';
 const firebaseApiKey = process.env.CRAFTWORLD_FIREBASE_API_KEY;
@@ -93,6 +93,18 @@ export async function lookupCraftworldFirebaseAccount(idToken: string): Promise<
 
   const data = await readJson<{ users?: Array<{ localId?: string; lastLoginAt?: string; createdAt?: string }> }>(res);
   return data.users?.[0] || {};
+}
+
+export async function getCraftworldAccountIdentity(idToken: string): Promise<CraftworldAccountIdentity> {
+  const res = await fetch(`${craftWorldBaseUrl}/auth/account`, {
+    method: 'GET',
+    headers: {
+      ...craftWorldHeaders(),
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+
+  return readJson<CraftworldAccountIdentity>(res);
 }
 
 export async function refreshCraftworldIdToken(refreshToken: string): Promise<{
