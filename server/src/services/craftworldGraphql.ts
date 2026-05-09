@@ -10,30 +10,33 @@ type CraftworldGraphqlAttempt = {
   label: string;
 };
 
-type AttemptConfig = {
-  label: string;
-  headers: Record<string, string>;
-};
+function normalizeCraftworldToken(token?: string) {
+  const value = String(token || '').trim();
+  if (!value) return '';
+  if (value.startsWith('jwt_')) return value;
+  if (value.split('.').length >= 3) return `jwt_${value}`;
+  return value;
+}
 
-function browserLikeHeaders() {
+function browserLikeHeaders(token?: string) {
+  const normalizedToken = normalizeCraftworldToken(token);
   return {
     Accept: '*/*',
     Origin: 'https://craft-world.gg',
     Referer: 'https://craft-world.gg/',
     'x-app-version': process.env.CRAFTWORLD_APP_VERSION || '1.10.1',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
+    ...(normalizedToken ? { Authorization: `Bearer ${normalizedToken}` } : {}),
   };
 }
 
-async function requestHomeData(endpoint: string, craftWorldUserId: string, headers: Record<string, string>, label: string): Promise<CraftworldGraphqlAttempt> {
+async function requestHomeData(endpoint: string, token: string, label: string): Promise<CraftworldGraphqlAttempt> {
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...browserLikeHeaders(),
-      ...headers,
+      ...browserLikeHeaders(token),
     },
-    body: JSON.stringify({ query, variables: { craftWorldUserId } }),
+    body: JSON.stringify({ query }),
   });
 
   const text = await res.text();
@@ -60,39 +63,19 @@ function summarizeAttempt(attempt: CraftworldGraphqlAttempt) {
   };
 }
 
-function buildAttemptConfigs(token: string, tokenLabel: string): AttemptConfig[] {
-  return [
-    { label: `${tokenLabel}:authorization-bearer`, headers: { Authorization: `Bearer ${token}` } },
-    { label: `${tokenLabel}:authorization-raw`, headers: { Authorization: token } },
-    { label: `${tokenLabel}:firebase-auth-bearer`, headers: { FirebaseAuthToken: `Bearer ${token}` } },
-    { label: `${tokenLabel}:firebase-auth-raw`, headers: { FirebaseAuthToken: token } },
-    { label: `${tokenLabel}:x-auth-token`, headers: { 'X-Auth-Token': token } },
-    { label: `${tokenLabel}:x-auth-token-bearer`, headers: { 'X-Auth-Token': `Bearer ${token}` } },
-    { label: `${tokenLabel}:x-firebase-auth-token`, headers: { 'X-Firebase-Auth-Token': token } },
-    { label: `${tokenLabel}:x-firebase-auth-token-bearer`, headers: { 'X-Firebase-Auth-Token': `Bearer ${token}` } },
-  ];
-}
-
-export async function getCraftworldHomeData(craftWorldUserId: string, authTokens?: string | string[]): Promise<CraftworldHomeData> {
+export async function getCraftworldHomeData(_craftWorldUserId: string, authTokens?: string | string[]): Promise<CraftworldHomeData> {
   const fallbackToken = process.env.CRAFTWORLD_AUTH_TOKEN;
   const tokens = (Array.isArray(authTokens) ? authTokens : [authTokens || fallbackToken]).filter(Boolean) as string[];
   const endpoint = process.env.CRAFTWORLD_GRAPHQL_ENDPOINT || 'https://craft-world.gg/graphql';
 
-  const attempts: CraftworldGraphqlAttempt[] = [];
-
-  const noAuthAttempt = await requestHomeData(endpoint, craftWorldUserId, {}, 'browser-like-no-auth');
-  attempts.push(noAuthAttempt);
-  if (noAuthAttempt.res.ok && !noAuthAttempt.raw.errors) return normalizeCraftworldHomeData(noAuthAttempt.raw);
-
   if (!tokens.length) return getMockCraftworldHomeData();
 
+  const attempts: CraftworldGraphqlAttempt[] = [];
+
   for (const [tokenIndex, token] of tokens.entries()) {
-    const attemptConfigs = buildAttemptConfigs(token, `token-${tokenIndex + 1}`);
-    for (const config of attemptConfigs) {
-      const attempt = await requestHomeData(endpoint, craftWorldUserId, config.headers, config.label);
-      attempts.push(attempt);
-      if (attempt.res.ok && !attempt.raw.errors) return normalizeCraftworldHomeData(attempt.raw);
-    }
+    const attempt = await requestHomeData(endpoint, token, `token-${tokenIndex + 1}:authorization-bearer-jwt`);
+    attempts.push(attempt);
+    if (attempt.res.ok && !attempt.raw.errors) return normalizeCraftworldHomeData(attempt.raw);
   }
 
   console.error('Craft World GraphQL home failed', attempts.map(summarizeAttempt));
