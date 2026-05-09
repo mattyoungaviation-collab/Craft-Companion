@@ -51,6 +51,20 @@ function formatCraftWorldSignMessage(payload: CraftWorldPayload) {
   ].join('\n');
 }
 
+function findThirdwebSessionToken() {
+  const marker = 'embedded-wallet-token:';
+  const storages = [window.localStorage, window.sessionStorage];
+  for (const storage of storages) {
+    for (let i = 0; i < storage.length; i += 1) {
+      const key = storage.key(i);
+      if (!key) continue;
+      const value = storage.getItem(key);
+      if (value && value.includes(marker)) return value;
+    }
+  }
+  return undefined;
+}
+
 export default function SignIn() {
   const nav = useNavigate();
   const [username, setU] = useState('');
@@ -83,7 +97,11 @@ export default function SignIn() {
       const craftWorldSignature = await provider.request({ method: 'personal_sign', params: [craftWorldMessage, address] });
 
       setWalletStatus('Connecting Craft World account...');
-      await craftWorldWalletLogin({ payload: craftWorldPayload.payload, signature: craftWorldSignature });
+      await craftWorldWalletLogin({
+        payload: craftWorldPayload.payload,
+        signature: craftWorldSignature,
+        thirdwebSession: findThirdwebSessionToken(),
+      });
 
       nav('/home');
     } catch (err: any) {
