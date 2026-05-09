@@ -78,6 +78,19 @@ export async function exchangeCraftworldCustomToken(customToken: string): Promis
   return readJson<{ idToken: string; refreshToken: string; expiresIn: string; isNewUser: boolean }>(res);
 }
 
+export async function lookupCraftworldFirebaseAccount(idToken: string): Promise<{ localId?: string; lastLoginAt?: string; createdAt?: string }> {
+  const apiKey = requireFirebaseApiKey();
+
+  const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken }),
+  });
+
+  const data = await readJson<{ users?: Array<{ localId?: string; lastLoginAt?: string; createdAt?: string }> }>(res);
+  return data.users?.[0] || {};
+}
+
 export async function refreshCraftworldIdToken(refreshToken: string): Promise<{
   idToken: string;
   refreshToken: string;
