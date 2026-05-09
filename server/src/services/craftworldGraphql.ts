@@ -66,6 +66,10 @@ function buildAttemptConfigs(token: string, tokenLabel: string): AttemptConfig[]
     { label: `${tokenLabel}:authorization-raw`, headers: { Authorization: token } },
     { label: `${tokenLabel}:firebase-auth-bearer`, headers: { FirebaseAuthToken: `Bearer ${token}` } },
     { label: `${tokenLabel}:firebase-auth-raw`, headers: { FirebaseAuthToken: token } },
+    { label: `${tokenLabel}:x-auth-token`, headers: { 'X-Auth-Token': token } },
+    { label: `${tokenLabel}:x-auth-token-bearer`, headers: { 'X-Auth-Token': `Bearer ${token}` } },
+    { label: `${tokenLabel}:x-firebase-auth-token`, headers: { 'X-Firebase-Auth-Token': token } },
+    { label: `${tokenLabel}:x-firebase-auth-token-bearer`, headers: { 'X-Firebase-Auth-Token': `Bearer ${token}` } },
   ];
 }
 
