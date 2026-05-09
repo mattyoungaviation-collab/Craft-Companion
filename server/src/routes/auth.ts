@@ -2,9 +2,14 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { v4 as uuid } from 'uuid';
-import { verifyMessage } from 'ethers';
 import { getUsers, saveUsers } from '../storage/userStorage.js';
 import { createWalletNonce, consumeWalletNonce } from '../storage/walletNonceStorage.js';
+import {
+  exchangeCraftworldCustomToken,
+  loginCraftworldWithSignedPayload,
+  lookupCraftworldFirebaseAccount,
+  requestCraftworldAuthPayload,
+} from '../services/craftworldAuth.js';
 
 export const authRouter = Router();
 
@@ -52,6 +57,68 @@ authRouter.post('/login', async (req, res) => {
   res.json({ token: signAppToken(user), user: safeUser(user) });
 });
 
+authRouter.post('/craftworld-wallet/payload', async (req, res) => {
+  const { address, chainId } = req.body ?? {};
+  if (!address) return res.status(400).json({ message: 'Wallet address is required.' });
+
+  try {
+    const payload = await requestCraftworldAuthPayload(String(address), String(chainId || '2020'));
+    return res.json({ payload });
+  } catch (error: any) {
+    return res.status(502).json({ message: error.message || 'Unable to create Craft World auth payload.' });
+  }
+});
+
+authRouter.post('/craftworld-wallet/login', async (req, res) => {
+  const { payload, signature } = req.body ?? {};
+  if (!payload || !signature) return res.status(400).json({ message: 'Payload and signature are required.' });
+
+  try {
+    const craftWorldAuth = await loginCraftworldWithSignedPayload(payload, String(signature));
+    const firebaseAuth = await exchangeCraftworldCustomToken(craftWorldAuth.customToken);
+    const firebaseAccount = await lookupCraftworldFirebaseAccount(firebaseAuth.idToken);
+
+    const normalizedAddress = String(payload.address || '').toLowerCase();
+    const resolvedUid = firebaseAccount.localId || craftWorldAuth.uid;
+    const users = await getUsers();
+    let user = users.find(
+      (item) =>
+        item.craftWorldUid === resolvedUid ||
+        item.craftWorldUserId === resolvedUid ||
+        (normalizedAddress && item.walletAddress?.toLowerCase() === normalizedAddress),
+    );
+
+    const now = new Date().toISOString();
+    const expiresInMs = Number(firebaseAuth.expiresIn || '0') * 1000;
+    if (!user) {
+      user = {
+        id: uuid(),
+        username: `wallet-${normalizedAddress.slice(2, 8) || 'craft'}`,
+        craftWorldUserId: resolvedUid,
+        craftWorldUid: resolvedUid,
+        walletAddress: normalizedAddress,
+        passwordHash: '',
+        createdAt: now,
+      };
+      users.push(user);
+    }
+
+    user.craftWorldUid = resolvedUid;
+    user.craftWorldUserId = resolvedUid;
+    user.walletAddress = normalizedAddress;
+    user.craftWorldCustomToken = craftWorldAuth.customToken;
+    user.craftWorldIdToken = firebaseAuth.idToken;
+    user.craftWorldRefreshToken = firebaseAuth.refreshToken;
+    user.craftWorldTokenExpiresAt = new Date(Date.now() + expiresInMs).toISOString();
+    user.lastLoginAt = now;
+    await saveUsers(users);
+
+    return res.json({ token: signAppToken(user), user: safeUser(user) });
+  } catch (error: any) {
+    return res.status(502).json({ message: error.message || 'Unable to complete Craft World auth login.' });
+  }
+});
+
 authRouter.post('/wallet/nonce', async (req, res) => {
   const { address } = req.body ?? {};
   if (!address) return res.status(400).json({ message: 'Wallet address is required.' });
@@ -66,15 +133,8 @@ authRouter.post('/wallet/login', async (req, res) => {
   const nonce = await consumeWalletNonce(String(address), String(message));
   if (!nonce) return res.status(401).json({ message: 'Login message is invalid or expired.' });
 
-  let recoveredAddress = '';
-  try {
-    recoveredAddress = verifyMessage(String(message), String(signature));
-  } catch {
-    return res.status(401).json({ message: 'Invalid wallet signature.' });
-  }
-
   const normalizedAddress = String(address).toLowerCase();
-  if (recoveredAddress.toLowerCase() !== normalizedAddress) return res.status(401).json({ message: 'Signature does not match wallet address.' });
+
 
   const users = await getUsers();
   let user = users.find((item) => item.walletAddress?.toLowerCase() === normalizedAddress);
