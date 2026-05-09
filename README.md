@@ -27,7 +27,7 @@ Copy `.env.example` to `.env` (and for server/client if desired).
 - `JWT_SECRET=replace_me`
 - `DATA_DIR=./data`
 - `CRAFTWORLD_GRAPHQL_ENDPOINT=https://craft-world.gg/graphql`
-- `CRAFTWORLD_AUTH_TOKEN=` (optional for local testing)
+- `CRAFTWORLD_AUTH_TOKEN=` (optional; when empty, Craft World dashboard sections return empty data instead of fake sample data)
 - `VITE_API_BASE_URL=http://localhost:3001`
 
 ## DATA_DIR and Render
@@ -44,8 +44,7 @@ On Render, attach a persistent disk at `/var/data` and set:
 GraphQL query lives in:
 - `server/src/services/craftworldGraphql.ts`
 
-If `CRAFTWORLD_AUTH_TOKEN` is empty, the backend returns realistic mock data.
-If token is set, backend calls `CRAFTWORLD_GRAPHQL_ENDPOINT` with:
-- `Authorization: Bearer <token>`
+If `CRAFTWORLD_AUTH_TOKEN` is empty, the backend returns empty Craft World data arrays.
+If token is set, backend calls `CRAFTWORLD_GRAPHQL_ENDPOINT` with the configured credentials.
 
 > Do not commit real tokens or secrets.
