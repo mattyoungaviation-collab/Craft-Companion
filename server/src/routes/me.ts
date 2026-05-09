@@ -7,6 +7,7 @@ function safeUser(user: any) {
     craftWorldUserId: user.craftWorldUserId,
     craftWorldUid: user.craftWorldUid,
     craftWorldFirebaseUserId: user.craftWorldFirebaseUserId,
+    craftWorldAccountId: user.craftWorldAccountId,
     walletAddress: user.walletAddress,
     primaryWalletAddress: user.primaryWalletAddress,
     username: user.username,
