@@ -11,4 +11,6 @@ export const updateCraftworldIdentity = (body:{craftWorldUid?:string;walletAddre
 export const getCraftworldHome = () => req('/api/craftworld/home') as Promise<CraftworldHomeData>;
 export const getCraftworldProfile = () => req('/api/craftworld/profile') as Promise<CraftworldProfile>;
 export const getCraftworldWallets = () => req('/api/craftworld/wallets') as Promise<{wallets:CraftworldWallet[];primaryWalletAddress?:string;lastSyncedAt:string}>;
+export const getCraftworldAuthPayload = (body:{address:string;chainId?:string}) => req('/api/craftworld/auth/payload',{method:'POST',body:JSON.stringify(body)}) as Promise<{payload:any}>;
+export const finishCraftworldAuthLogin = (body:{payload:any;signature:string}) => req('/api/craftworld/auth/login',{method:'POST',body:JSON.stringify(body)}) as Promise<{uid:string;walletAddress:string;expiresAt:string;isNewUser:boolean}>;
 export const logout = () => localStorage.removeItem('token');
