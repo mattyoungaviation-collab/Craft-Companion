@@ -11,8 +11,16 @@ import {
 export const craftworldRouter = Router();
 
 craftworldRouter.get('/home', async (req: any, res) => {
-  const data = await getCraftworldHomeData(req.user.craftWorldUserId);
-  res.json(data);
+  const user = (await getUsers()).find((u) => u.id === req.user?.id);
+  const uid = user?.craftWorldUid || user?.craftWorldUserId || req.user.craftWorldUid || req.user.craftWorldUserId;
+  const token = user?.craftWorldIdToken || process.env.CRAFTWORLD_AUTH_TOKEN;
+
+  try {
+    const data = await getCraftworldHomeData(uid || '', token);
+    res.json(data);
+  } catch (error: any) {
+    res.status(502).json({ message: error.message || 'Unable to load Craft World home data.' });
+  }
 });
 
 craftworldRouter.get('/profile', async (req: any, res) => {
