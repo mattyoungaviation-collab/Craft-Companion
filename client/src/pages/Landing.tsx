@@ -1,0 +1,2 @@
+import { Link } from 'react-router-dom';
+export default function Landing(){return <div className='min-h-screen grid place-content-center text-center gap-4'><h1 className='text-4xl font-bold'>Craftworld Companion</h1><p>Your factories. Your inventory. Your Craft World account in one place.</p><div className='space-x-3'><Link className='px-4 py-2 bg-blue-600 rounded' to='/signin'>Sign In</Link><Link className='px-4 py-2 bg-slate-700 rounded' to='/register'>Create Account</Link></div></div>}
