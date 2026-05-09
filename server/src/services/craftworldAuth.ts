@@ -2,8 +2,7 @@ import { CraftworldAccountIdentity, CraftworldAuthPayload } from '../types.js';
 
 const craftWorldBaseUrl = process.env.CRAFTWORLD_BASE_URL || 'https://craft-world.gg';
 const firebaseApiKey = process.env.CRAFTWORLD_FIREBASE_API_KEY;
-const thirdwebClientId = process.env.THIRDWEB_CLIENT_ID || process.env.CRAFTWORLD_CLIENT_ID || '25bc35076e7821aa8a5779982e2d04b2';
-const thirdwebAuthCompleteUrl = process.env.THIRDWEB_AUTH_COMPLETE_URL || 'https://api.thirdweb.com/v1/auth/complete';
+const thirdwebAccountsUrl = process.env.THIRDWEB_ACCOUNTS_URL || 'https://embedded-wallet.thirdweb.com/api/2024-05-05/accounts';
 
 function craftWorldHeaders() {
   return {
@@ -107,33 +106,21 @@ export async function lookupCraftworldFirebaseAccount(idToken: string): Promise<
   return data.users?.[0] || {};
 }
 
-export async function getCraftworldAccountIdentity(idToken?: string): Promise<CraftworldAccountIdentity | null> {
-  if (!idToken) return null;
+export async function getCraftworldAccountIdentity(embeddedWalletSession?: string): Promise<CraftworldAccountIdentity | null> {
+  if (!embeddedWalletSession) return null;
+  const authorization = embeddedWalletSession.startsWith('Bearer ')
+    ? embeddedWalletSession
+    : `Bearer ${embeddedWalletSession}`;
 
-  const res = await fetch(thirdwebAuthCompleteUrl, {
-    method: 'POST',
+  const res = await fetch(thirdwebAccountsUrl, {
+    method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
-      'x-client-id': thirdwebClientId,
+      ...craftWorldHeaders(),
+      Authorization: authorization,
     },
-    body: JSON.stringify({ type: 'jwt', payload: idToken }),
   });
 
-  const data = await readJson<{ token?: string; userId?: string; walletAddress?: string; isNewUser?: boolean }>(res);
-  if (!data.userId && !data.walletAddress) return null;
-
-  return {
-    id: data.userId,
-    linkedAccounts: data.userId
-      ? [
-          {
-            type: 'custom_jwt',
-            details: { id: data.userId, user_id: data.userId },
-          },
-        ]
-      : [],
-    wallets: data.walletAddress ? [{ address: data.walletAddress }] : [],
-  };
+  return readJson<CraftworldAccountIdentity>(res);
 }
 
 export async function refreshCraftworldIdToken(refreshToken: string): Promise<{
