@@ -90,11 +90,11 @@ craftworldRouter.get('/wallets', async (_req, res) => {
 });
 
 craftworldRouter.post('/auth/payload', async (req, res) => {
-  const { address, chainId } = req.body ?? {};
+  const { address } = req.body ?? {};
   if (!address) return res.status(400).json({ message: 'Wallet address is required.' });
 
   try {
-    const payload = await requestCraftworldAuthPayload(String(address), String(chainId || '2020'));
+    const payload = await requestCraftworldAuthPayload(String(address));
     res.json({ payload });
   } catch (error: any) {
     res.status(502).json({ message: error.message || 'Unable to create Craft World auth payload.' });
