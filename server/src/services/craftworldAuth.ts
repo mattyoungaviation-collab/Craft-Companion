@@ -39,8 +39,35 @@ function orderAuthPayload(payload: CraftworldAuthPayload): CraftworldAuthPayload
 }
 
 async function readJson<T>(res: Response): Promise<T> {
-  const raw = await res.json();
+  const text = await res.text();
+  let raw: any;
+  try {
+    raw = text ? JSON.parse(text) : {};
+  } catch {
+    const preview = text.slice(0, 120).replace(/\s+/g, ' ');
+    throw new Error(`Craft World returned non JSON response from ${res.url}: ${preview}`);
+  }
+
   if (!res.ok) throw new Error(raw?.message || raw?.error?.message || 'Craft World auth request failed.');
+  return raw as T;
+}
+
+async function tryReadJson<T>(res: Response): Promise<T | null> {
+  const text = await res.text();
+  let raw: any;
+  try {
+    raw = text ? JSON.parse(text) : {};
+  } catch {
+    const preview = text.slice(0, 120).replace(/\s+/g, ' ');
+    console.warn(`Craft World identity endpoint returned non JSON from ${res.url}: ${preview}`);
+    return null;
+  }
+
+  if (!res.ok) {
+    console.warn(`Craft World identity endpoint failed from ${res.url}:`, raw?.message || raw?.error?.message || res.status);
+    return null;
+  }
+
   return raw as T;
 }
 
@@ -95,16 +122,34 @@ export async function lookupCraftworldFirebaseAccount(idToken: string): Promise<
   return data.users?.[0] || {};
 }
 
-export async function getCraftworldAccountIdentity(idToken: string): Promise<CraftworldAccountIdentity> {
-  const res = await fetch(`${craftWorldBaseUrl}/auth/account`, {
-    method: 'GET',
-    headers: {
-      ...craftWorldHeaders(),
-      Authorization: `Bearer ${idToken}`,
-    },
-  });
+function getAccountIdentityUrls() {
+  const configured = process.env.CRAFTWORLD_ACCOUNT_IDENTITY_URL || process.env.CRAFTWORLD_ACCOUNT_ENDPOINT;
+  if (configured) return [configured];
 
-  return readJson<CraftworldAccountIdentity>(res);
+  return [
+    `${craftWorldBaseUrl}/auth/account`,
+    `${craftWorldBaseUrl}/auth/me`,
+    `${craftWorldBaseUrl}/api/auth/account`,
+    `${craftWorldBaseUrl}/api/auth/me`,
+    `${craftWorldBaseUrl}/account`,
+  ];
+}
+
+export async function getCraftworldAccountIdentity(idToken: string): Promise<CraftworldAccountIdentity | null> {
+  for (const url of getAccountIdentityUrls()) {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        ...craftWorldHeaders(),
+        Authorization: `Bearer ${idToken}`,
+      },
+    });
+
+    const account = await tryReadJson<CraftworldAccountIdentity>(res);
+    if (account?.id) return account;
+  }
+
+  return null;
 }
 
 export async function refreshCraftworldIdToken(refreshToken: string): Promise<{
