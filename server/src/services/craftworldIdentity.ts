@@ -34,13 +34,25 @@ const walletsQuery = `
   }
 `;
 
+function normalizeCraftworldToken(token?: string) {
+  const value = String(token || '').trim();
+  if (!value) return '';
+  if (value.startsWith('jwt_')) return value;
+  if (value.split('.').length >= 3) return `jwt_${value}`;
+  return value;
+}
+
 async function graphqlRequest<T>(query: string, variables: Record<string, unknown> | null = null, token?: string): Promise<T> {
+  const normalizedToken = normalizeCraftworldToken(token);
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    Accept: '*/*',
+    Origin: 'https://craft-world.gg',
+    Referer: 'https://craft-world.gg/',
     'x-app-version': process.env.CRAFTWORLD_APP_VERSION || '1.10.1',
   };
 
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (normalizedToken) headers.Authorization = `Bearer ${normalizedToken}`;
 
   const res = await fetch(endpoint(), {
     method: 'POST',
@@ -63,8 +75,8 @@ export async function getCraftworldProfileByUid(uid: string): Promise<Craftworld
   };
 }
 
-export async function getCraftworldWallets(): Promise<{ wallets: CraftworldWallet[]; primaryWalletAddress?: string; lastSyncedAt: string }> {
-  const token = process.env.CRAFTWORLD_AUTH_TOKEN;
+export async function getCraftworldWallets(bearerToken?: string): Promise<{ wallets: CraftworldWallet[]; primaryWalletAddress?: string; lastSyncedAt: string }> {
+  const token = bearerToken || process.env.CRAFTWORLD_AUTH_TOKEN;
   if (!token) return { wallets: [], lastSyncedAt: new Date().toISOString() };
 
   const data = await graphqlRequest<{ account?: { wallets?: CraftworldWallet[] } }>(walletsQuery, null, token);
