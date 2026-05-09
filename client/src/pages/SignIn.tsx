@@ -21,8 +21,36 @@ declare global {
   }
 }
 
+type CraftWorldPayload = {
+  domain: string;
+  uri: string;
+  statement: string;
+  address: string;
+  version: string;
+  nonce: string;
+  issued_at: string;
+  expiration_time: string;
+  chain_id: string;
+};
+
 function getWalletProvider() {
   return window.ronin?.provider || window.ethereum;
+}
+
+function formatCraftWorldSignMessage(payload: CraftWorldPayload) {
+  return [
+    `${payload.domain} wants you to sign in with your Ethereum account:`,
+    payload.address,
+    '',
+    payload.statement,
+    '',
+    `URI: ${payload.uri}`,
+    `Version: ${payload.version}`,
+    `Chain ID: ${payload.chain_id}`,
+    `Nonce: ${payload.nonce}`,
+    `Issued At: ${payload.issued_at}`,
+    `Expiration Time: ${payload.expiration_time}`,
+  ].join('\n');
 }
 
 export default function SignIn() {
@@ -58,7 +86,7 @@ export default function SignIn() {
       const craftWorldPayload = await getCraftworldAuthPayload({ address, chainId });
 
       setWalletStatus('Please sign the Craft World login message.');
-      const craftWorldMessage = JSON.stringify(craftWorldPayload.payload);
+      const craftWorldMessage = formatCraftWorldSignMessage(craftWorldPayload.payload);
       const craftWorldSignature = await provider.request({ method: 'personal_sign', params: [craftWorldMessage, address] });
 
       setWalletStatus('Connecting Craft World account...');
