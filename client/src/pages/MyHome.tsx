@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import Card from '../components/Card';
 import Layout from '../components/Layout';
-import { getCraftworldHome, getMe } from '../services/api';
+import {
+  getCraftworldHome,
+  getCraftworldProfile,
+  getCraftworldWallets,
+  getMe,
+  updateCraftworldIdentity,
+} from '../services/api';
 
 type ResourceAmount = { symbol?: string; amount?: number };
 type DynoSummary = { displayName?: string; rarity?: string; isOneOfOne?: boolean };
@@ -16,6 +22,20 @@ type FactorySummary = {
 type VaultSummary = { symbol?: string; amount?: number; capacity?: number; isUnlocked?: boolean };
 type WorkshopItem = { symbol?: string; level?: number };
 type CurrencyBalance = { type?: string; amount?: number };
+type ProfileData = {
+  uid: string;
+  walletAddress?: string;
+  avatarUrl?: string;
+  displayName?: string;
+  level?: number;
+  badges?: { displayName?: string | null; description?: string | null; url?: string | null }[];
+  lastSyncedAt?: string;
+};
+type WalletData = {
+  wallets?: { address: string; type?: string | null; provider?: string | null; providerId?: string | null; primary: boolean }[];
+  primaryWalletAddress?: string;
+  lastSyncedAt?: string;
+};
 
 type HomeData = {
   lastSyncedAt?: string;
@@ -42,10 +62,19 @@ function displayNumber(value: unknown) {
   return typeof value === 'number' ? value.toLocaleString() : 'Not connected';
 }
 
+function ipfsToHttp(url?: string) {
+  if (!url) return '';
+  return url.startsWith('ipfs://') ? url.replace('ipfs://', 'https://ipfs.io/ipfs/') : url;
+}
+
 export default function MyHome() {
   const [me, setMe] = useState<any>();
   const [home, setHome] = useState<HomeData>();
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [walletData, setWalletData] = useState<WalletData | null>(null);
+  const [craftWorldUidInput, setCraftWorldUidInput] = useState('');
   const [error, setError] = useState('');
+  const [identityMessage, setIdentityMessage] = useState('');
 
   const load = async () => {
     setError('');
@@ -53,8 +82,37 @@ export default function MyHome() {
       const [meData, homeData] = await Promise.all([getMe(), getCraftworldHome()]);
       setMe(meData);
       setHome(homeData || {});
+      setCraftWorldUidInput(meData.craftWorldUid || meData.craftWorldUserId || '');
+
+      const uid = meData.craftWorldUid || meData.craftWorldUserId;
+      if (uid) {
+        try {
+          setProfile(await getCraftworldProfile());
+        } catch {
+          setProfile(null);
+        }
+      }
+
+      try {
+        setWalletData(await getCraftworldWallets());
+      } catch {
+        setWalletData(null);
+      }
     } catch (err) {
       setError('Unable to load dashboard data. Please try again.');
+    }
+  };
+
+  const saveIdentity = async () => {
+    setIdentityMessage('');
+    setError('');
+    try {
+      const updated = await updateCraftworldIdentity({ craftWorldUid: craftWorldUidInput });
+      setMe(updated);
+      setIdentityMessage('Craft World UID saved.');
+      await load();
+    } catch {
+      setError('Unable to save Craft World UID.');
     }
   };
 
@@ -72,6 +130,7 @@ export default function MyHome() {
   const workshop = home.workshop || [];
   const proficiencies = home.proficiencies || [];
   const currencies = home.currencies || [];
+  const wallets = walletData?.wallets || [];
   const isCraftWorldConnected = Boolean(
     account.walletAddress || dynos.length || factories.length || inventory.length || vaults.length || workshop.length || currencies.length,
   );
@@ -84,7 +143,7 @@ export default function MyHome() {
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <p>Welcome back, {me.username}.</p>
-              <p>Craft World User ID: {me.craftWorldUserId}</p>
+              <p>Craft World UID: {me.craftWorldUid || me.craftWorldUserId || 'Not set'}</p>
               <p>Last synced: {lastSynced}</p>
             </div>
             <button onClick={load} className="rounded bg-blue-600 px-3 py-2 text-sm font-semibold">
@@ -95,12 +154,61 @@ export default function MyHome() {
 
         {error && <Card>{error}</Card>}
 
+        <Card title="Connect Craft World Identity">
+          <div className="space-y-3">
+            <p className="text-sm text-slate-300">Save your Craft World UID so this app can load your public profile and prepare account specific tools.</p>
+            <div className="flex flex-col gap-2 md:flex-row">
+              <input
+                value={craftWorldUidInput}
+                onChange={(event) => setCraftWorldUidInput(event.target.value)}
+                placeholder="Craft World UID"
+                className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              />
+              <button onClick={saveIdentity} className="rounded bg-blue-600 px-3 py-2 text-sm font-semibold">
+                Save UID
+              </button>
+            </div>
+            {identityMessage && <p className="text-sm text-emerald-300">{identityMessage}</p>}
+          </div>
+        </Card>
+
+        {profile && (
+          <Card title="Craft World Profile">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center">
+              {profile.avatarUrl && <img src={ipfsToHttp(profile.avatarUrl)} alt="Craft World avatar" className="h-20 w-20 rounded-xl object-cover" />}
+              <div className="space-y-1">
+                <p className="text-lg font-semibold">{profile.displayName || 'Unnamed player'}</p>
+                <p className="text-sm text-slate-300">Level {profile.level ?? 'N/A'}</p>
+                <p className="break-all text-sm text-slate-400">Wallet: {profile.walletAddress || 'Not available'}</p>
+                <p className="text-sm text-slate-400">Badges: {profile.badges?.length || 0}</p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        <Card title="Craft World Wallets">
+          {wallets.length ? (
+            <div className="space-y-2">
+              {wallets.map((wallet) => (
+                <div key={wallet.address} className="rounded-lg border border-slate-700 p-3 text-sm">
+                  <div className="break-all font-semibold">{wallet.address}</div>
+                  <div className="text-slate-400">
+                    {wallet.type || 'Unknown type'} • {wallet.provider || 'No provider'} {wallet.primary ? '• Primary' : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState>No authenticated Craft World wallets loaded yet. Add the Craft World auth token in the server environment to sync wallet data.</EmptyState>
+          )}
+        </Card>
+
         <Card title="Craft World Connection">
           {isCraftWorldConnected ? (
             <p className="text-sm text-emerald-300">Live Craft World data is connected.</p>
           ) : (
             <EmptyState>
-              Craft World data is not connected yet. Add CRAFTWORLD_AUTH_TOKEN in the server environment to sync live player data.
+              Craft World account data is not connected yet. Add CRAFTWORLD_AUTH_TOKEN in the server environment to sync live player data.
             </EmptyState>
           )}
         </Card>
