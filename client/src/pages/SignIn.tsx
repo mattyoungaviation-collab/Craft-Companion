@@ -19,56 +19,8 @@ declare global {
   }
 }
 
-type CraftWorldPayload = {
-  domain: string;
-  uri: string;
-  statement: string;
-  address: string;
-  version: string;
-  nonce: string;
-  issued_at: string;
-  expiration_time: string;
-  chain_id: string;
-};
-
 function getWalletProvider() {
   return window.ronin?.provider || window.ethereum;
-}
-
-function formatCraftWorldSignMessage(payload: CraftWorldPayload) {
-  return [
-    `${payload.domain} wants you to sign in with your Ethereum account:`,
-    payload.address,
-    '',
-    payload.statement,
-    '',
-    `URI: ${payload.uri}`,
-    `Version: ${payload.version}`,
-    `Chain ID: ${payload.chain_id}`,
-    `Nonce: ${payload.nonce}`,
-    `Issued At: ${payload.issued_at}`,
-    `Expiration Time: ${payload.expiration_time}`,
-  ].join('\n');
-}
-
-function extractThirdwebSession(value: string) {
-  const marker = 'embedded-wallet-token:';
-  const start = value.indexOf(marker);
-  if (start === -1) return undefined;
-  return value.slice(start).match(/embedded-wallet-token:[^"\\\s]+/)?.[0];
-}
-
-function findThirdwebSessionToken() {
-  const storages = [window.localStorage, window.sessionStorage];
-  for (const storage of storages) {
-    for (let i = 0; i < storage.length; i += 1) {
-      const key = storage.key(i);
-      if (!key) continue;
-      const session = extractThirdwebSession(storage.getItem(key) || '');
-      if (session) return session;
-    }
-  }
-  return undefined;
 }
 
 export default function SignIn() {
@@ -94,22 +46,18 @@ export default function SignIn() {
       if (!address) throw new Error('No wallet address was returned.');
 
       setWalletStatus('Preparing Craft World login payload...');
-      const chainIdHex = await provider.request({ method: 'eth_chainId' }).catch(() => null);
-      const chainId = chainIdHex ? String(Number(chainIdHex)) : '2020';
-      const craftWorldPayload = await getCraftworldAuthPayload({ address, chainId });
+      const craftWorldPayload = await getCraftworldAuthPayload({ address });
 
-      setWalletStatus('Please sign the Craft World login message.');
-      const craftWorldMessage = formatCraftWorldSignMessage(craftWorldPayload.payload);
-      const craftWorldSignature = await provider.request({ method: 'personal_sign', params: [craftWorldMessage, address] });
-
-      const thirdwebSession = findThirdwebSessionToken();
-      if (!thirdwebSession) throw new Error('Craft World embedded wallet session was not found. Open Craft World in this browser first, then try again.');
+      setWalletStatus('Please sign the Craft World nonce.');
+      const craftWorldSignature = await provider.request({
+        method: 'personal_sign',
+        params: [craftWorldPayload.payload.nonce, address],
+      });
 
       setWalletStatus('Connecting Craft World account...');
       await craftWorldWalletLogin({
         payload: craftWorldPayload.payload,
         signature: craftWorldSignature,
-        thirdwebSession,
       });
 
       nav('/home');

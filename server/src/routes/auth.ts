@@ -47,9 +47,9 @@ function asAccountId(value?: string) {
   return clean;
 }
 
-function getCustomJwtUserId(account: any) {
+function getCustomJwtUserId(account: any, fallback = '') {
   const customJwt = account?.linkedAccounts?.find((linked: any) => linked?.type === 'custom_jwt');
-  return String(customJwt?.details?.user_id || customJwt?.details?.id || '').trim();
+  return String(customJwt?.details?.user_id || customJwt?.details?.id || fallback || '').trim();
 }
 
 function getPrimaryWalletAddress(account: any, fallbackAddress = '') {
@@ -81,11 +81,11 @@ authRouter.post('/login', async (req, res) => {
 });
 
 authRouter.post('/craftworld-wallet/payload', async (req, res) => {
-  const { address, chainId } = req.body ?? {};
+  const { address } = req.body ?? {};
   if (!address) return res.status(400).json({ message: 'Wallet address is required.' });
 
   try {
-    const payload = await requestCraftworldAuthPayload(String(address), String(chainId || '2020'));
+    const payload = await requestCraftworldAuthPayload(String(address));
     return res.json({ payload });
   } catch (error: any) {
     return res.status(502).json({ message: error.message || 'Unable to create Craft World auth payload.' });
@@ -93,20 +93,20 @@ authRouter.post('/craftworld-wallet/payload', async (req, res) => {
 });
 
 authRouter.post('/craftworld-wallet/login', async (req, res) => {
-  const { payload, signature, thirdwebSession } = req.body ?? {};
+  const { payload, signature } = req.body ?? {};
   if (!payload || !signature) return res.status(400).json({ message: 'Payload and signature are required.' });
 
   try {
     const craftWorldAuth = await loginCraftworldWithSignedPayload(payload, String(signature));
     const firebaseAuth = await exchangeCraftworldCustomToken(craftWorldAuth.customToken);
     const firebaseAccount = await lookupCraftworldFirebaseAccount(firebaseAuth.idToken);
-    const account = await getCraftworldAccountIdentity(thirdwebSession);
+    const account = await getCraftworldAccountIdentity(firebaseAuth.idToken, payload.walletAddress || payload.address || '');
 
     const accountId = asAccountId(account?.id);
-    const customJwtUserId = getCustomJwtUserId(account);
-    const walletAddress = getPrimaryWalletAddress(account, payload.address);
+    const customJwtUserId = getCustomJwtUserId(account, firebaseAccount.localId);
+    const walletAddress = getPrimaryWalletAddress(account, payload.walletAddress || payload.address || '');
 
-    if (!accountId) return res.status(502).json({ message: 'Thirdweb account identity was not available.' });
+    if (!accountId) return res.status(502).json({ message: 'Craft World account id was not available.' });
 
     console.log('Craft World wallet login identity', {
       accountId,
