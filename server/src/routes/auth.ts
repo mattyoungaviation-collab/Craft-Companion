@@ -102,7 +102,7 @@ authRouter.post('/craftworld-wallet/login', async (req, res) => {
     const firebaseAccount = await lookupCraftworldFirebaseAccount(firebaseAuth.idToken);
     const account = await getCraftworldAccountIdentity(firebaseAuth.idToken);
 
-    const accountId = asAccountId(account.id);
+    const accountId = asAccountId(account?.id);
     const customJwtUserId = getCustomJwtUserId(account);
     const walletAddress = getPrimaryWalletAddress(account, payload.address);
 
