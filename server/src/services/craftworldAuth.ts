@@ -15,6 +15,20 @@ function craftWorldHeaders() {
   };
 }
 
+function orderAuthPayload(payload: CraftworldAuthPayload): CraftworldAuthPayload {
+  return {
+    domain: payload.domain,
+    address: payload.address,
+    statement: payload.statement,
+    uri: payload.uri,
+    version: payload.version,
+    chain_id: payload.chain_id,
+    nonce: payload.nonce,
+    issued_at: payload.issued_at,
+    expiration_time: payload.expiration_time,
+  };
+}
+
 async function readJson<T>(res: Response): Promise<T> {
   const raw = await res.json();
   if (!res.ok) throw new Error(raw?.message || raw?.error?.message || 'Craft World auth request failed.');
@@ -36,7 +50,7 @@ export async function loginCraftworldWithSignedPayload(payload: CraftworldAuthPa
   const res = await fetch(`${craftWorldBaseUrl}/auth/login`, {
     method: 'POST',
     headers: craftWorldHeaders(),
-    body: JSON.stringify({ payload: { Payload: payload, Signature: signature } }),
+    body: JSON.stringify({ payload: { Payload: orderAuthPayload(payload), Signature: signature } }),
   });
 
   return readJson<{ customToken: string; uid: string }>(res);
