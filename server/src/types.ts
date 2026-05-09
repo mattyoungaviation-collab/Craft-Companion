@@ -1,6 +1,9 @@
 export type UserAccount = {
   id: string;
   craftWorldUserId: string;
+  craftWorldUid?: string;
+  walletAddress?: string;
+  primaryWalletAddress?: string;
   username: string;
   passwordHash: string;
   createdAt: string;
@@ -55,4 +58,29 @@ export type CraftworldHomeData = {
   lastSyncedAt: string;
 };
 
-export type AuthUserPayload = { id: string; username: string; craftWorldUserId: string };
+export type CraftworldProfileBadge = {
+  url?: string | null;
+  description?: string | null;
+  displayName?: string | null;
+  infoUrl?: string | null;
+};
+
+export type CraftworldProfile = {
+  uid: string;
+  walletAddress?: string;
+  avatarUrl?: string;
+  displayName?: string;
+  level?: number;
+  badges: CraftworldProfileBadge[];
+  lastSyncedAt: string;
+};
+
+export type CraftworldWallet = {
+  address: string;
+  type?: string | null;
+  provider?: string | null;
+  providerId?: string | null;
+  primary: boolean;
+};
+
+export type AuthUserPayload = { id: string; username: string; craftWorldUserId: string; craftWorldUid?: string };
