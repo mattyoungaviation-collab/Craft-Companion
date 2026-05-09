@@ -2,6 +2,7 @@ import { CraftworldAccountIdentity, CraftworldAuthPayload } from '../types.js';
 
 const craftWorldBaseUrl = process.env.CRAFTWORLD_BASE_URL || 'https://craft-world.gg';
 const firebaseApiKey = process.env.CRAFTWORLD_FIREBASE_API_KEY;
+const thirdwebAccountsUrl = process.env.THIRDWEB_ACCOUNTS_URL || 'https://embedded-wallet.thirdweb.com/api/2024-05-05/accounts';
 
 function craftWorldHeaders() {
   return {
@@ -15,6 +16,8 @@ function craftWorldHeaders() {
     'x-sdk-os': process.env.CRAFTWORLD_SDK_OS || 'WebGLPlayer',
     'x-sdk-platform': process.env.CRAFTWORLD_SDK_PLATFORM || 'unity',
     'x-sdk-version': process.env.CRAFTWORLD_SDK_VERSION || '6.1.1',
+    'x-embedded-wallet-version': process.env.CRAFTWORLD_EMBEDDED_WALLET_VERSION || 'unity:6.1.1',
+    'x-thirdweb-client-id': process.env.CRAFTWORLD_CLIENT_ID || '25bc35076e7821aa8a5779982e2d04b2',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
   };
 }
@@ -45,29 +48,10 @@ async function readJson<T>(res: Response): Promise<T> {
     raw = text ? JSON.parse(text) : {};
   } catch {
     const preview = text.slice(0, 120).replace(/\s+/g, ' ');
-    throw new Error(`Craft World returned non JSON response from ${res.url}: ${preview}`);
+    throw new Error(`Expected JSON from ${res.url}, received: ${preview}`);
   }
 
   if (!res.ok) throw new Error(raw?.message || raw?.error?.message || 'Craft World auth request failed.');
-  return raw as T;
-}
-
-async function tryReadJson<T>(res: Response): Promise<T | null> {
-  const text = await res.text();
-  let raw: any;
-  try {
-    raw = text ? JSON.parse(text) : {};
-  } catch {
-    const preview = text.slice(0, 120).replace(/\s+/g, ' ');
-    console.warn(`Craft World identity endpoint returned non JSON from ${res.url}: ${preview}`);
-    return null;
-  }
-
-  if (!res.ok) {
-    console.warn(`Craft World identity endpoint failed from ${res.url}:`, raw?.message || raw?.error?.message || res.status);
-    return null;
-  }
-
   return raw as T;
 }
 
@@ -122,34 +106,21 @@ export async function lookupCraftworldFirebaseAccount(idToken: string): Promise<
   return data.users?.[0] || {};
 }
 
-function getAccountIdentityUrls() {
-  const configured = process.env.CRAFTWORLD_ACCOUNT_IDENTITY_URL || process.env.CRAFTWORLD_ACCOUNT_ENDPOINT;
-  if (configured) return [configured];
+export async function getCraftworldAccountIdentity(embeddedWalletAuthToken?: string): Promise<CraftworldAccountIdentity | null> {
+  if (!embeddedWalletAuthToken) return null;
+  const authorization = embeddedWalletAuthToken.startsWith('Bearer ')
+    ? embeddedWalletAuthToken
+    : `Bearer ${embeddedWalletAuthToken}`;
 
-  return [
-    `${craftWorldBaseUrl}/auth/account`,
-    `${craftWorldBaseUrl}/auth/me`,
-    `${craftWorldBaseUrl}/api/auth/account`,
-    `${craftWorldBaseUrl}/api/auth/me`,
-    `${craftWorldBaseUrl}/account`,
-  ];
-}
+  const res = await fetch(thirdwebAccountsUrl, {
+    method: 'GET',
+    headers: {
+      ...craftWorldHeaders(),
+      Authorization: authorization,
+    },
+  });
 
-export async function getCraftworldAccountIdentity(idToken: string): Promise<CraftworldAccountIdentity | null> {
-  for (const url of getAccountIdentityUrls()) {
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        ...craftWorldHeaders(),
-        Authorization: `Bearer ${idToken}`,
-      },
-    });
-
-    const account = await tryReadJson<CraftworldAccountIdentity>(res);
-    if (account?.id) return account;
-  }
-
-  return null;
+  return readJson<CraftworldAccountIdentity>(res);
 }
 
 export async function refreshCraftworldIdToken(refreshToken: string): Promise<{
