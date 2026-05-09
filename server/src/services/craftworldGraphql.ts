@@ -7,7 +7,7 @@ const query = `query CraftworldCompanionHome { account { id experiencePoints pow
 export async function getCraftworldHomeData(craftWorldUserId: string): Promise<CraftworldHomeData> {
   const token = process.env.CRAFTWORLD_AUTH_TOKEN;
   const endpoint = process.env.CRAFTWORLD_GRAPHQL_ENDPOINT || 'https://craft-world.gg/graphql';
-  if (!token) return getMockCraftworldHomeData(craftWorldUserId);
+  if (!token) return getMockCraftworldHomeData();
   const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ query, variables: { craftWorldUserId } }) });
   const raw = await res.json();
   return normalizeCraftworldHomeData(raw);
