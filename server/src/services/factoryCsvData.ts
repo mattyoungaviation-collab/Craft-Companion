@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export type FactoryDataRow = {
   token: string;
@@ -15,13 +16,21 @@ export type FactoryDataRow = {
   upgrade_amount: number;
 };
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, '../../..');
+
 const csvFiles = [
+  path.resolve(repoRoot, 'client/public/data/factories.csv'),
+  path.resolve(repoRoot, 'client/public/data/Game Data - Factories - rev. v_01 +events (2) (1).csv'),
   path.resolve(process.cwd(), 'client/public/data/factories.csv'),
   path.resolve(process.cwd(), 'client/public/data/Game Data - Factories - rev. v_01 +events (2) (1).csv'),
-  path.resolve(process.cwd(), 'client/public/client/public/Game Data - Factories - rev. v_01 +events (2).csv'),
+  path.resolve(process.cwd(), '../client/public/data/factories.csv'),
+  path.resolve(process.cwd(), '../client/public/data/Game Data - Factories - rev. v_01 +events (2) (1).csv'),
 ];
 
 let cache: FactoryDataRow[] | null = null;
+let loadedFrom = '';
 
 function parseNumber(value: string) {
   const parsed = Number(String(value || '').trim());
@@ -85,16 +94,25 @@ function parseCsv(csv: string) {
 export async function loadFactoryCsvData() {
   if (cache) return cache;
 
+  const tried: string[] = [];
   for (const file of csvFiles) {
     try {
+      tried.push(file);
       const csv = await fs.readFile(file, 'utf-8');
       cache = parseCsv(csv);
+      loadedFrom = file;
+      console.log(`Loaded ${cache.length} factory CSV rows from ${loadedFrom}`);
       return cache;
     } catch {
       // try next path
     }
   }
 
+  console.warn(`Factory CSV could not be loaded. Tried: ${tried.join(' | ')}`);
   cache = [];
   return cache;
+}
+
+export function getFactoryCsvLoadInfo() {
+  return { loadedFrom, rowCount: cache?.length || 0 };
 }
