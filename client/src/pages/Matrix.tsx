@@ -52,7 +52,7 @@ const tokenOrder = [
 ];
 
 const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
-const POLL_MS = 3000;
+const POLL_MS = 1000;
 const EMPTY_MATRIX_CACHE: MatrixCachePayload = { updatedAt: '', scanStatus: 'idle', scanColumn: '', nextScanAt: '', cells: {} };
 
 function formatNumber(value: number, digits = 2) {
@@ -76,9 +76,13 @@ function secondsUntil(dateString?: string) {
 
 async function loadMatrixCache(): Promise<MatrixCachePayload> {
   const authToken = localStorage.getItem('token');
-  const response = await fetch(`${API}/api/craftworld/matrix-cache`, {
+  const response = await fetch(`${API}/api/craftworld/matrix-cache?_=${Date.now()}`, {
+    method: 'GET',
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
   });
@@ -93,14 +97,16 @@ export default function Matrix() {
   const [selectedGroup, setSelectedGroup] = useState('EARTH');
   const [loading, setLoading] = useState(true);
   const [countdown, setCountdown] = useState(0);
+  const [lastPolledAt, setLastPolledAt] = useState('');
   const [error, setError] = useState('');
 
   async function refreshCache() {
     try {
       const nextCache = await loadMatrixCache();
       setCache({ ...EMPTY_MATRIX_CACHE, ...nextCache, cells: (nextCache.cells || {}) as Record<string, MatrixCell> });
-      if (nextCache.selectedGroup && !selectedGroup) setSelectedGroup(nextCache.selectedGroup);
       setCountdown(secondsUntil(nextCache.nextScanAt));
+      setLastPolledAt(new Date().toISOString());
+      setError('');
     } catch {
       setError('Unable to load global matrix cache.');
     }
@@ -114,8 +120,8 @@ export default function Matrix() {
         const [factoryRows, matrixCache] = await Promise.all([loadFactoryData(), loadMatrixCache().catch(() => EMPTY_MATRIX_CACHE)]);
         setRows(factoryRows);
         setCache({ ...EMPTY_MATRIX_CACHE, ...matrixCache, cells: (matrixCache.cells || {}) as Record<string, MatrixCell> });
-        if (matrixCache.selectedGroup) setSelectedGroup(matrixCache.selectedGroup);
         setCountdown(secondsUntil(matrixCache.nextScanAt));
+        setLastPolledAt(new Date().toISOString());
       } catch {
         setError('Unable to load matrix data.');
       } finally {
@@ -127,9 +133,10 @@ export default function Matrix() {
   }, []);
 
   useEffect(() => {
+    refreshCache();
     const poll = window.setInterval(refreshCache, POLL_MS);
     return () => window.clearInterval(poll);
-  }, [selectedGroup]);
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -180,10 +187,10 @@ export default function Matrix() {
         <Card title="Matrix">
           <div className="space-y-3">
             <p className="text-sm text-slate-300">
-              This page now reads from the global server matrix cache. The server scans and saves the matrix on one shared clock.
+              This page reads from the global server matrix cache and forces a fresh poll every second.
             </p>
             <p className="text-sm text-yellow-200">
-              The browser polls the saved cache every 3 seconds, so the page opens fast and updates as the global scan writes new cells.
+              The browser no longer scans. It only reloads the saved cache as the server writes new matrix cells.
             </p>
             {error && <p className="text-sm text-red-300">{error}</p>}
             <div className="flex flex-wrap gap-2">
@@ -197,11 +204,12 @@ export default function Matrix() {
                 </button>
               ))}
             </div>
-            <div className="grid gap-2 text-xs text-slate-400 md:grid-cols-4">
+            <div className="grid gap-2 text-xs text-slate-400 md:grid-cols-5">
               <p>Next global scan: {countdown}s</p>
               <p>Status: {cache.scanStatus || 'idle'}</p>
               <p>Column: {cache.scanColumn || 'None'}</p>
               <p>Last save: {cache.updatedAt ? new Date(cache.updatedAt).toLocaleString() : 'No save yet'}</p>
+              <p>Last poll: {lastPolledAt ? new Date(lastPolledAt).toLocaleTimeString() : 'Never'}</p>
             </div>
           </div>
         </Card>
