@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Sand factory">
+  <defs>
+    <linearGradient id="gold" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffe08a"/>
+      <stop offset="0.28" stop-color="#ffba38"/>
+      <stop offset="0.68" stop-color="#d47b0d"/>
+      <stop offset="1" stop-color="#7a3d06"/>
+    </linearGradient>
+    <linearGradient id="sand" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#fff2cd"/>
+      <stop offset="0.44" stop-color="#e1ad71"/>
+      <stop offset="1" stop-color="#a86c35"/>
+    </linearGradient>
+    <linearGradient id="darkGold" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f7b12c"/>
+      <stop offset="1" stop-color="#8d4b0a"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="11" flood-color="#000" flood-opacity="0.42"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" fill="none"/>
+  <g filter="url(#shadow)" stroke="#090d12" stroke-width="10" stroke-linejoin="round" stroke-linecap="round">
+    <g transform="translate(66 92)">
+      <path d="M51 264h171v54c0 29-38 52-85 52s-86-23-86-52z" fill="url(#gold)"/>
+      <path d="M51 214h171v57c0 29-38 52-85 52s-86-23-86-52z" fill="url(#darkGold)"/>
+      <path d="M51 163h171v57c0 29-38 52-85 52s-86-23-86-52z" fill="url(#gold)"/>
+      <path d="M51 112h171v57c0 29-38 52-85 52s-86-23-86-52z" fill="url(#darkGold)"/>
+      <path d="M51 61h171v57c0 29-38 52-85 52s-86-23-86-52z" fill="url(#gold)"/>
+      <path d="M40 46h193v48c-20 27-66 43-96 43-31 0-78-16-97-43z" fill="url(#gold)"/>
+      <path d="M71 44c8-38 34-70 67-70 32 0 58 32 66 70-18 23-117 23-133 0z" fill="url(#sand)"/>
+      <path d="M74 44c28 20 99 20 127 0" fill="none" stroke="#fff4c9" stroke-width="7" opacity="0.82"/>
+      <path d="M47 119c31 27 149 27 180 0" fill="none" stroke="#fff0a9" stroke-width="8" opacity="0.72"/>
+      <path d="M48 220c34 26 145 26 179 0" fill="none" stroke="#fff0a9" stroke-width="8" opacity="0.72"/>
+      <path d="M48 319c34 26 145 26 179 0" fill="none" stroke="#fff0a9" stroke-width="8" opacity="0.72"/>
+      <path d="M137 137v228" stroke="#ffe181" stroke-width="6" opacity="0.5"/>
+      <path d="M85 169l52 31 53-31" fill="none" stroke="#8b4504" stroke-width="6" opacity="0.55"/>
+      <path d="M85 270l52 31 53-31" fill="none" stroke="#8b4504" stroke-width="6" opacity="0.55"/>
+    </g>
+
+    <g transform="translate(254 181)">
+      <path d="M14 169h139v44c0 24-31 43-69 43s-70-19-70-43z" fill="url(#gold)"/>
+      <path d="M14 125h139v50c0 24-31 43-69 43s-70-19-70-43z" fill="url(#darkGold)"/>
+      <path d="M4 107h159v37c-15 24-55 39-79 39-25 0-65-15-80-39z" fill="url(#gold)"/>
+      <path d="M32 105c8-30 29-54 53-54 25 0 46 24 53 54-17 19-90 19-106 0z" fill="url(#sand)"/>
+      <path d="M35 105c23 15 76 15 99 0" fill="none" stroke="#fff4c9" stroke-width="6" opacity="0.82"/>
+    </g>
+
+    <path d="M284 230c45-46 92-69 142-61 33 6 54 35 48 68-50 17-100 15-150-7" fill="url(#sand)"/>
+    <path d="M301 225c45-16 87-19 132-9" fill="none" stroke="#fff3cf" stroke-width="8" opacity="0.75"/>
+
+    <path d="M337 116v147" fill="none" stroke="url(#gold)" stroke-width="30"/>
+    <path d="M337 116v147" fill="none" stroke="#fff0a3" stroke-width="7" opacity="0.65"/>
+    <path d="M291 90h93v42h-93z" fill="url(#gold)"/>
+
+    <circle cx="68" cy="366" r="8" fill="#ffd068"/>
+    <circle cx="96" cy="400" r="9" fill="#ffd068"/>
+    <circle cx="154" cy="431" r="9" fill="#ffd068"/>
+    <circle cx="215" cy="418" r="7" fill="#ffd068"/>
+    <circle cx="311" cy="445" r="8" fill="#ffd068"/>
+    <circle cx="356" cy="423" r="9" fill="#ffd068"/>
+    <circle cx="421" cy="377" r="8" fill="#ffd068"/>
+    <circle cx="462" cy="352" r="7" fill="#ffd068"/>
+
+    <circle cx="163" cy="107" r="5" fill="#fff7d5" stroke="none"/>
+    <circle cx="128" cy="80" r="6" fill="#fff7d5" stroke="none"/>
+    <circle cx="146" cy="59" r="5" fill="#fff7d5" stroke="none"/>
+    <circle cx="335" cy="281" r="5" fill="#fff7d5" stroke="none"/>
+    <circle cx="397" cy="222" r="6" fill="#fff7d5" stroke="none"/>
+    <circle cx="442" cy="247" r="5" fill="#fff7d5" stroke="none"/>
+  </g>
+</svg>
