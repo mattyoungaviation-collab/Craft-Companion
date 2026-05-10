@@ -1,2 +1,25 @@
-import { Link } from 'react-router-dom'; import { logout } from '../services/api';
-export default function Layout({children}:{children:any}){return <div><nav className='p-4 border-b border-slate-800 flex justify-between'><Link to='/home'>Craftworld Companion</Link><div className='space-x-4'><Link to='/home'>My Home</Link><button onClick={()=>{logout();location.href='/signin';}}>Sign Out</button></div></nav><main className='p-4 max-w-6xl mx-auto'>{children}</main></div>}
+import { Link } from 'react-router-dom';
+import { logout } from '../services/api';
+
+export default function Layout({ children }: { children: any }) {
+  return (
+    <div>
+      <nav className="flex justify-between border-b border-slate-800 p-4">
+        <Link to="/home">Craftworld Companion</Link>
+        <div className="space-x-4">
+          <Link to="/home">My Home</Link>
+          <Link to="/profitability">Profitability</Link>
+          <button
+            onClick={() => {
+              logout();
+              location.href = '/signin';
+            }}
+          >
+            Sign Out
+          </button>
+        </div>
+      </nav>
+      <main className="mx-auto max-w-6xl p-4">{children}</main>
+    </div>
+  );
+}
