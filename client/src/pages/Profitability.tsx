@@ -3,6 +3,7 @@ import Card from '../components/Card';
 import Layout from '../components/Layout';
 import { getCraftworldHome, getCraftworldQuote } from '../services/api';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
+import { enqueueQuoteRequest } from '../utils/rateLimit';
 
 type OwnedFactory = {
   id?: string;
@@ -172,36 +173,39 @@ export default function Profitability() {
 
   useEffect(() => {
     if (!quoteRequests.length) return;
+    let cancelled = false;
 
     const loadQuotes = async () => {
       setQuoteLoading(true);
       setQuoteError('');
 
       try {
-        const entries = await Promise.all(
-          quoteRequests.map(async (request) => {
-            try {
-              const quote = await getCraftworldQuote({
-                inputSymbol: request.symbol,
-                outputSymbol: 'COIN',
-                inputAmount: request.amount,
-              });
-              return [request.key, quote] as const;
-            } catch {
-              return [request.key, null] as const;
-            }
-          }),
-        );
+        const nextQuotes: QuoteMap = {};
+        for (const request of quoteRequests) {
+          try {
+            const quote = await enqueueQuoteRequest(() => getCraftworldQuote({
+              inputSymbol: request.symbol,
+              outputSymbol: 'COIN',
+              inputAmount: request.amount,
+            }));
+            nextQuotes[request.key] = quote;
+          } catch {
+            nextQuotes[request.key] = null;
+          }
 
-        setQuotes((current) => ({ ...current, ...Object.fromEntries(entries) }));
+          if (!cancelled) setQuotes((current) => ({ ...current, ...nextQuotes }));
+        }
       } catch {
-        setQuoteError('Unable to load one or more Craft World quotes.');
+        if (!cancelled) setQuoteError('Unable to load one or more Craft World quotes.');
       } finally {
-        setQuoteLoading(false);
+        if (!cancelled) setQuoteLoading(false);
       }
     };
 
     loadQuotes();
+    return () => {
+      cancelled = true;
+    };
   }, [quoteRequests]);
 
   const getQuote = (symbol: string, amount: number) => quotes[quoteKey(symbol, amount)] || null;
@@ -238,7 +242,7 @@ export default function Profitability() {
               Output value uses the sell quote: output token → COIN. Input costs use the same token → COIN value so returns compare against what those inputs are worth in COIN.
             </p>
             <p className="text-sm text-yellow-200">
-              All prices are quoted in COIN using Craft World exact input quotes. Values include the built in 2.5% fee plus impact and slippage returned by Craft World.
+              All prices are quoted in COIN using Craft World exact input quotes. Values include the built in 2.5% fee plus impact and slippage returned by Craft World. Quote calls are limited to one request every 0.25 seconds.
             </p>
 
             {error && <p className="text-sm text-red-300">{error}</p>}
