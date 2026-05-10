@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { authRouter } from './routes/auth.js';
 import { meRouter } from './routes/me.js';
 import { craftworldRouter } from './routes/craftworld.js';
+import { startMatrixScanner } from './services/matrixScanner.js';
 
 dotenv.config();
 const app = express();
@@ -27,6 +28,8 @@ const auth = (req: any, res: any, next: any) => {
 app.use('/api/auth', authRouter);
 app.use('/api/me', auth, meRouter);
 app.use('/api/craftworld', auth, craftworldRouter);
+
+startMatrixScanner();
 
 app.use(express.static(clientDistPath));
 app.get('*', (_req, res) => {
