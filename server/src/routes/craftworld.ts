@@ -3,6 +3,7 @@ import { getUsers, saveUsers } from '../storage/userStorage.js';
 import { getCraftworldHomeData } from '../services/craftworldGraphql.js';
 import { getCraftworldProfileByUid, getCraftworldWallets } from '../services/craftworldIdentity.js';
 import { getMockCraftworldHomeData } from '../services/mockCraftworldData.js';
+import { getCraftworldExactInputQuote } from '../services/craftworldQuote.js';
 import {
   exchangeCraftworldCustomToken,
   getCraftworldAccountIdentity,
@@ -46,6 +47,14 @@ async function getFreshCraftworldTokens(user: any) {
   }
 
   return [user.craftWorldIdToken, user.craftWorldCustomToken, process.env.CRAFTWORLD_AUTH_TOKEN].filter(Boolean) as string[];
+}
+
+async function getCurrentUserAndFreshToken(req: any) {
+  const users = await getUsers();
+  const user = users.find((u) => u.id === req.user?.id);
+  const tokens = await getFreshCraftworldTokens(user);
+  if (user) await saveUsers(users);
+  return { user, token: tokens[0] || '' };
 }
 
 async function getPublicProfileHomeFallback(uid: string) {
@@ -104,6 +113,25 @@ craftworldRouter.get('/wallets', async (_req, res) => {
     res.json(wallets);
   } catch (error: any) {
     res.status(502).json({ message: error.message || 'Unable to load Craft World wallets.' });
+  }
+});
+
+craftworldRouter.post('/quote', async (req: any, res) => {
+  const { inputSymbol, outputSymbol = 'COIN', inputAmount } = req.body ?? {};
+
+  try {
+    const { token } = await getCurrentUserAndFreshToken(req);
+    const quote = await getCraftworldExactInputQuote(
+      {
+        inputSymbol: String(inputSymbol || ''),
+        outputSymbol: String(outputSymbol || 'COIN'),
+        inputAmount: Number(inputAmount || 0),
+      },
+      token,
+    );
+    res.json(quote);
+  } catch (error: any) {
+    res.status(502).json({ message: error.message || 'Unable to load Craft World quote.' });
   }
 });
 
