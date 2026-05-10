@@ -14,6 +14,7 @@ export type FactoryDataRow = {
 
 const csvPaths = [
   '/data/factories.csv',
+  '/data/Game%20Data%20-%20Factories%20-%20rev.%20v_01%20%2Bevents%20(2)%20(1).csv',
   '/client/public/Game%20Data%20-%20Factories%20-%20rev.%20v_01%20%2Bevents%20(2).csv',
 ];
 
