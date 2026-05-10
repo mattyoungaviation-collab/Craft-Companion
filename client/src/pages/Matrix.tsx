@@ -3,6 +3,7 @@ import Card from '../components/Card';
 import Layout from '../components/Layout';
 import { getCraftworldQuote } from '../services/api';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
+import { enqueueQuoteRequest } from '../utils/rateLimit';
 
 type Quote = {
   input: { symbol: string; amount: number };
@@ -145,25 +146,22 @@ export default function Matrix() {
 
       for (const request of missingRequests) {
         try {
-          const quote = await getCraftworldQuote({
-            inputSymbol: request.symbol,
-            outputSymbol: 'COIN',
-            inputAmount: request.amount,
-          });
+          const quote = await enqueueQuoteRequest(() =>
+            getCraftworldQuote({
+              inputSymbol: request.symbol,
+              outputSymbol: 'COIN',
+              inputAmount: request.amount,
+            }),
+          );
           nextQuotes[request.key] = quote;
         } catch {
           nextQuotes[request.key] = null;
         }
 
-        if (!cancelled && Object.keys(nextQuotes).length % 12 === 0) {
-          setQuotes((current) => ({ ...current, ...nextQuotes }));
-        }
+        if (!cancelled) setQuotes((current) => ({ ...current, ...nextQuotes }));
       }
 
-      if (!cancelled) {
-        setQuotes((current) => ({ ...current, ...nextQuotes }));
-        setQuoteLoading(false);
-      }
+      if (!cancelled) setQuoteLoading(false);
     };
 
     loadQuotes();
@@ -237,7 +235,7 @@ export default function Matrix() {
               ))}
             </div>
             <p className="text-xs text-slate-400">
-              {quoteLoading ? 'Loading live quote data...' : 'Quotes loaded.'} Showing return as (output sell value minus input buy cost) divided by input buy cost.
+              {quoteLoading ? 'Loading live quote data at one call every 0.25 seconds...' : 'Quotes loaded.'} Showing return as (output sell value minus input buy cost) divided by input buy cost.
             </p>
           </div>
         </Card>
