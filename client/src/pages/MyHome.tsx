@@ -179,7 +179,7 @@ export default function MyHome() {
               <div className="space-y-1">
                 <p className="text-lg font-semibold">{profile.displayName || 'Unnamed player'}</p>
                 <p className="text-sm text-slate-300">Level {profile.level ?? 'N/A'}</p>
-                <p className="break-all text-sm text-slate-400">Wallet: {profile.walletAddress || 'Not available'}</p>
+                <p className="break-all text-sm text-slate-400">Profile Wallet: {profile.walletAddress || 'Not available'}</p>
                 <p className="text-sm text-slate-400">Badges: {profile.badges?.length || 0}</p>
               </div>
             </div>
@@ -190,16 +190,24 @@ export default function MyHome() {
           {wallets.length ? (
             <div className="space-y-2">
               {wallets.map((wallet) => (
-                <div key={wallet.address} className="rounded-lg border border-slate-700 p-3 text-sm">
-                  <div className="break-all font-semibold">{wallet.address}</div>
-                  <div className="text-slate-400">
-                    {wallet.type || 'Unknown type'} • {wallet.provider || 'No provider'} {wallet.primary ? '• Primary' : ''}
+                <div key={wallet.address} className={`rounded-lg border p-3 text-sm ${wallet.primary ? 'border-emerald-400/80 bg-emerald-500/10' : 'border-slate-700'}`}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="break-all font-semibold">{wallet.address}</div>
+                    {wallet.primary && (
+                      <span className="rounded-full bg-emerald-400 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-slate-950">Primary</span>
+                    )}
                   </div>
+                  <div className="mt-1 text-slate-400">Type: {wallet.type || 'Unknown type'}</div>
+                  <div className="text-slate-400">Provider: {wallet.provider || 'No provider'}</div>
                 </div>
               ))}
             </div>
           ) : (
-            <EmptyState>No authenticated Craft World wallets loaded yet. Add the Craft World auth token in the server environment to sync wallet data.</EmptyState>
+            <EmptyState>
+              {isCraftWorldConnected
+                ? 'No authenticated Craft World wallets are available for this account yet.'
+                : 'Connect live Craft World data to load authenticated wallet details.'}
+            </EmptyState>
           )}
         </Card>
 
@@ -217,7 +225,7 @@ export default function MyHome() {
           <Card title="Power">{displayNumber(account.power)}</Card>
           <Card title="Skill Points">{displayNumber(account.skillPoints)}</Card>
           <Card title="Experience Points">{displayNumber(account.experiencePoints)}</Card>
-          <Card title="Wallet Address">{account.walletAddress || 'Not connected'}</Card>
+          <Card title="Primary Wallet">{account.walletAddress || 'Not connected'}</Card>
         </div>
 
         <Card title="My Dynos">
