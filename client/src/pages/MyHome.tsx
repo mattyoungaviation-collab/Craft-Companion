@@ -59,6 +59,7 @@ const factoryImages: Record<string, string> = {
   COPPER: '/factories/copper.svg',
   MUD: '/factories/mud.svg',
   SAND: '/factories/sand.svg',
+  SCREWS: '/factories/screws.svg',
   STEEL: '/factories/steel.svg',
 };
 
