@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { UserAccount } from '../types.js';
 
 const dataDir = process.env.DATA_DIR || './data';
@@ -38,7 +39,7 @@ export async function getUsers(): Promise<UserAccount[]> {
 
 export async function saveUsers(users: UserAccount[]) {
   await ensureFile();
-  const tempFile = `${usersFile}.tmp`;
+  const tempFile = `${usersFile}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
   await fs.writeFile(tempFile, JSON.stringify(users, null, 2), 'utf-8');
   await fs.rename(tempFile, usersFile);
 }
