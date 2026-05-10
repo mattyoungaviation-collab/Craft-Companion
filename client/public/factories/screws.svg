@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Screws factory">
+  <defs>
+    <linearGradient id="metal" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f2fbff"/>
+      <stop offset="0.28" stop-color="#b9cdd5"/>
+      <stop offset="0.62" stop-color="#647b84"/>
+      <stop offset="1" stop-color="#25343c"/>
+    </linearGradient>
+    <linearGradient id="darkMetal" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#566a74"/>
+      <stop offset="0.45" stop-color="#263944"/>
+      <stop offset="1" stop-color="#0d151c"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffd47a"/>
+      <stop offset="0.4" stop-color="#c77a29"/>
+      <stop offset="1" stop-color="#5f351b"/>
+    </linearGradient>
+    <linearGradient id="wood" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#d99951"/>
+      <stop offset="0.48" stop-color="#9b5d2b"/>
+      <stop offset="1" stop-color="#4c2b18"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="13" stdDeviation="12" flood-color="#000" flood-opacity="0.42"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" fill="none"/>
+  <g filter="url(#shadow)" stroke="#070b10" stroke-width="10" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M87 370h338l36 39v37H51v-37z" fill="url(#wood)"/>
+    <path d="M87 370h338l36 39H51z" fill="#d2924f"/>
+    <path d="M93 404h329" stroke="#f6c16f" stroke-width="8" opacity="0.7"/>
+    <path d="M80 437h356" stroke="#4d2a17" stroke-width="7" opacity="0.75"/>
+
+    <path d="M126 171h260l50 48v124H176l-50-48z" fill="url(#darkMetal)"/>
+    <path d="M176 219h260l-50-48H126z" fill="url(#metal)"/>
+    <path d="M176 219v124l-50-48V171z" fill="#53666f"/>
+    <path d="M174 219h261" stroke="#e6f5f7" stroke-width="8" opacity="0.75"/>
+    <path d="M146 249l47 36h223" stroke="#e6f5f7" stroke-width="8" opacity="0.6"/>
+
+    <path d="M169 270h220v55H169z" fill="#111a23"/>
+    <path d="M169 291h220" stroke="#4b626d" stroke-width="14" opacity="0.7"/>
+    <path d="M181 324c49 22 145 22 196 0" fill="none" stroke="url(#gold)" stroke-width="9"/>
+    <path d="M183 342h191" stroke="#101922" stroke-width="14" opacity="0.78"/>
+    <path d="M191 354c44 21 131 21 176 0" fill="none" stroke="url(#gold)" stroke-width="8"/>
+
+    <g transform="translate(112 72)">
+      <path d="M21 54h54v231c0 20-12 36-27 36S21 305 21 285z" fill="url(#metal)"/>
+      <ellipse cx="48" cy="54" rx="34" ry="17" fill="url(#metal)"/>
+      <circle cx="48" cy="18" r="36" fill="url(#metal)"/>
+      <path d="M26 17h44" stroke="#1d2a32" stroke-width="7"/>
+      <path d="M20 103h56" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+      <path d="M21 127h54" stroke="#3d535d" stroke-width="7" opacity="0.78"/>
+      <path d="M21 151h54" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+      <path d="M21 175h54" stroke="#3d535d" stroke-width="7" opacity="0.78"/>
+      <path d="M21 199h54" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+      <path d="M21 223h54" stroke="#3d535d" stroke-width="7" opacity="0.78"/>
+      <path d="M21 247h54" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+      <path d="M0 294h96v44H0z" fill="url(#metal)"/>
+    </g>
+
+    <g transform="translate(221 44)">
+      <path d="M21 84h54v268c0 20-12 36-27 36S21 372 21 352z" fill="url(#metal)"/>
+      <ellipse cx="48" cy="84" rx="34" ry="17" fill="url(#metal)"/>
+      <circle cx="48" cy="48" r="36" fill="url(#metal)"/>
+      <path d="M26 47h44" stroke="#1d2a32" stroke-width="7"/>
+      <path d="M21 132h54" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+      <path d="M21 157h54" stroke="#3d535d" stroke-width="7" opacity="0.78"/>
+      <path d="M21 182h54" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+      <path d="M21 207h54" stroke="#3d535d" stroke-width="7" opacity="0.78"/>
+      <path d="M21 232h54" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+      <path d="M21 257h54" stroke="#3d535d" stroke-width="7" opacity="0.78"/>
+      <path d="M21 282h54" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+      <path d="M21 307h54" stroke="#3d535d" stroke-width="7" opacity="0.78"/>
+      <path d="M21 332h54" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+      <path d="M0 362h96v48H0z" fill="url(#metal)"/>
+    </g>
+
+    <g transform="translate(343 72)">
+      <path d="M21 54h54v231c0 20-12 36-27 36S21 305 21 285z" fill="url(#metal)"/>
+      <ellipse cx="48" cy="54" rx="34" ry="17" fill="url(#metal)"/>
+      <circle cx="48" cy="18" r="36" fill="url(#metal)"/>
+      <path d="M26 17h44" stroke="#1d2a32" stroke-width="7"/>
+      <path d="M20 103h56" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+      <path d="M21 127h54" stroke="#3d535d" stroke-width="7" opacity="0.78"/>
+      <path d="M21 151h54" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+      <path d="M21 175h54" stroke="#3d535d" stroke-width="7" opacity="0.78"/>
+      <path d="M21 199h54" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+      <path d="M21 223h54" stroke="#3d535d" stroke-width="7" opacity="0.78"/>
+      <path d="M21 247h54" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+      <path d="M0 294h96v44H0z" fill="url(#metal)"/>
+    </g>
+
+    <g transform="translate(222 167)">
+      <path d="M17 42h75v110H17z" fill="url(#metal)"/>
+      <ellipse cx="55" cy="42" rx="38" ry="18" fill="url(#metal)"/>
+      <path d="M31 42h48" stroke="#1d2a32" stroke-width="7"/>
+      <path d="M18 77h74" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+      <path d="M18 101h74" stroke="#3d535d" stroke-width="7" opacity="0.78"/>
+      <path d="M18 125h74" stroke="#edfaff" stroke-width="7" opacity="0.7"/>
+    </g>
+
+    <path d="M121 174l54 46" stroke="#edfaff" stroke-width="7" opacity="0.6"/>
+    <path d="M381 174l54 46" stroke="#edfaff" stroke-width="7" opacity="0.55"/>
+    <path d="M88 389h73" stroke="#f4bf6e" stroke-width="8" opacity="0.75"/>
+    <path d="M337 389h73" stroke="#f4bf6e" stroke-width="8" opacity="0.75"/>
+  </g>
+</svg>
