@@ -43,6 +43,33 @@ async function quoteTokenToCoin(symbol: string, amount: number) {
   );
 }
 
+async function saveScannerState(input: {
+  cache: any;
+  cells: Record<string, unknown>;
+  scanStatus: 'idle' | 'scanning';
+  scanColumn: string;
+  scanStartedAt: string;
+  rowCount: number;
+  tokenCount: number;
+  note?: string;
+}) {
+  return saveMatrixCache({
+    ...input.cache,
+    cells: input.cells,
+    scanStatus: input.scanStatus,
+    scanColumn: input.scanColumn,
+    scanStartedAt: input.scanStartedAt,
+    nextScanAt,
+    updatedAt: new Date().toISOString(),
+    scanner: {
+      rowCount: input.rowCount,
+      tokenCount: input.tokenCount,
+      note: input.note || '',
+      heartbeatAt: new Date().toISOString(),
+    },
+  } as any);
+}
+
 async function scanOnce() {
   if (scanning) return;
   scanning = true;
@@ -55,25 +82,31 @@ async function scanOnce() {
     const cache = await getMatrixCache();
     let cells = { ...(cache.cells || {}) };
 
-    await saveMatrixCache({
-      ...cache,
+    console.log(`Matrix scan starting with ${rows.length} rows and ${tokens.length} tokens`);
+
+    await saveScannerState({
+      cache,
       cells,
       scanStatus: 'scanning',
-      scanColumn: '',
+      scanColumn: rows.length ? 'starting' : 'no rows',
       scanStartedAt,
-      nextScanAt,
-      updatedAt: new Date().toISOString(),
+      rowCount: rows.length,
+      tokenCount: tokens.length,
+      note: rows.length ? 'scan started' : 'no factory CSV rows loaded',
     });
 
+    if (!rows.length) return;
+
     for (const token of tokens) {
-      await saveMatrixCache({
-        ...cache,
+      await saveScannerState({
+        cache,
         cells,
         scanStatus: 'scanning',
         scanColumn: token,
         scanStartedAt,
-        nextScanAt,
-        updatedAt: new Date().toISOString(),
+        rowCount: rows.length,
+        tokenCount: tokens.length,
+        note: `scanning ${token}`,
       });
 
       const columnRows = rows.filter((row) => row.token === token).sort((a, b) => a.level - b.level);
@@ -104,29 +137,41 @@ async function scanOnce() {
             },
           };
 
-          await saveMatrixCache({
-            ...cache,
+          await saveScannerState({
+            cache,
             cells,
             scanStatus: 'scanning',
             scanColumn: token,
             scanStartedAt,
-            nextScanAt,
-            updatedAt: new Date().toISOString(),
+            rowCount: rows.length,
+            tokenCount: tokens.length,
+            note: `updated ${row.token} level ${row.level}`,
           });
         } catch (error: any) {
           console.warn(`Matrix scan failed for ${row.token} level ${row.level}: ${error?.message || error}`);
+          await saveScannerState({
+            cache,
+            cells,
+            scanStatus: 'scanning',
+            scanColumn: token,
+            scanStartedAt,
+            rowCount: rows.length,
+            tokenCount: tokens.length,
+            note: `failed ${row.token} level ${row.level}: ${error?.message || error}`,
+          });
         }
       }
     }
 
-    await saveMatrixCache({
-      ...cache,
+    await saveScannerState({
+      cache,
       cells,
       scanStatus: 'idle',
       scanColumn: '',
       scanStartedAt,
-      nextScanAt,
-      updatedAt: new Date().toISOString(),
+      rowCount: rows.length,
+      tokenCount: tokens.length,
+      note: 'scan complete',
     });
   } catch (error: any) {
     console.error('Matrix scan failed', error?.message || error);
@@ -138,6 +183,7 @@ async function scanOnce() {
 export function startMatrixScanner() {
   if (started) return;
   started = true;
+  console.log('Starting global matrix scanner');
   scanOnce();
   setInterval(() => {
     nextScanAt = new Date(Date.now() + REFRESH_MS).toISOString();
