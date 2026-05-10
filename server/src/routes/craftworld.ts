@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getUsers, saveUsers } from '../storage/userStorage.js';
+import { getMatrixCache, saveMatrixCache } from '../storage/matrixCacheStorage.js';
 import { getCraftworldHomeData } from '../services/craftworldGraphql.js';
 import { getCraftworldProfileByUid, getCraftworldWallets } from '../services/craftworldIdentity.js';
 import { getMockCraftworldHomeData } from '../services/mockCraftworldData.js';
@@ -132,6 +133,28 @@ craftworldRouter.post('/quote', async (req: any, res) => {
     res.json(quote);
   } catch (error: any) {
     res.status(502).json({ message: error.message || 'Unable to load Craft World quote.' });
+  }
+});
+
+craftworldRouter.get('/matrix-cache', async (_req, res) => {
+  try {
+    res.json(await getMatrixCache());
+  } catch (error: any) {
+    res.status(500).json({ message: error.message || 'Unable to load matrix cache.' });
+  }
+});
+
+craftworldRouter.put('/matrix-cache', async (req, res) => {
+  try {
+    const { selectedGroup, cells } = req.body ?? {};
+    const saved = await saveMatrixCache({
+      updatedAt: new Date().toISOString(),
+      selectedGroup: typeof selectedGroup === 'string' ? selectedGroup : undefined,
+      cells: cells && typeof cells === 'object' ? cells : {},
+    });
+    res.json(saved);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message || 'Unable to save matrix cache.' });
   }
 });
 
