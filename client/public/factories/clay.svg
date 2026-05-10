@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Clay factory">
+  <defs>
+    <linearGradient id="gold" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffe08a"/>
+      <stop offset="0.32" stop-color="#ffb636"/>
+      <stop offset="0.68" stop-color="#d98316"/>
+      <stop offset="1" stop-color="#81470c"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#e9ffff" stop-opacity="0.95"/>
+      <stop offset="0.38" stop-color="#49d4ff" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#0678c7"/>
+    </linearGradient>
+    <linearGradient id="pipe" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#82ecff"/>
+      <stop offset="0.4" stop-color="#159ce4"/>
+      <stop offset="1" stop-color="#064e96"/>
+    </linearGradient>
+    <linearGradient id="clay" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#b96a4e"/>
+      <stop offset="0.45" stop-color="#8d4734"/>
+      <stop offset="1" stop-color="#51291f"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="11" flood-color="#000" flood-opacity="0.42"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" fill="none"/>
+  <g filter="url(#shadow)" stroke="#080f16" stroke-width="10" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M111 318h290l-32 63H143z" fill="url(#gold)"/>
+    <path d="M145 275h222c28 0 50 22 50 50v21H95v-21c0-28 22-50 50-50z" fill="url(#gold)"/>
+
+    <g transform="translate(80 126)">
+      <path d="M0 48h86v190c0 27-19 49-43 49S0 265 0 238z" fill="url(#water)"/>
+      <ellipse cx="43" cy="48" rx="43" ry="19" fill="#ffd06a"/>
+      <path d="M-8 32h102v34H-8z" fill="url(#gold)"/>
+      <path d="M4 226c19 13 59 13 78 0v34c-6 20-22 31-39 31S10 280 4 260z" fill="url(#gold)"/>
+      <circle cx="24" cy="105" r="5" fill="#eaffff" stroke="none"/>
+      <circle cx="55" cy="151" r="5" fill="#8befff" stroke="none"/>
+      <circle cx="32" cy="189" r="4" fill="#8befff" stroke="none"/>
+    </g>
+
+    <g transform="translate(346 126)">
+      <path d="M0 48h86v190c0 27-19 49-43 49S0 265 0 238z" fill="url(#water)"/>
+      <ellipse cx="43" cy="48" rx="43" ry="19" fill="#ffd06a"/>
+      <path d="M-8 32h102v34H-8z" fill="url(#gold)"/>
+      <path d="M4 226c19 13 59 13 78 0v34c-6 20-22 31-39 31S10 280 4 260z" fill="url(#gold)"/>
+      <circle cx="28" cy="108" r="5" fill="#eaffff" stroke="none"/>
+      <circle cx="61" cy="156" r="5" fill="#8befff" stroke="none"/>
+      <circle cx="38" cy="193" r="4" fill="#8befff" stroke="none"/>
+    </g>
+
+    <path d="M163 388c-16 13-39 23-73 21-27-1-47-13-52-30 7-31 29-55 62-60 27-4 48 5 63 21z" fill="url(#clay)"/>
+    <path d="M358 388c16 13 39 23 73 21 27-1 47-13 52-30-7-31-29-55-62-60-27-4-48 5-63 21z" fill="url(#clay)"/>
+    <path d="M204 409h104l-13 47h-78z" fill="url(#clay)"/>
+
+    <path d="M151 247c26-34 65-52 113-50 51 2 91 25 113 62 13 22 14 48 2 71-23 43-76 65-132 58-58-7-100-38-111-80-5-21 0-42 15-61z" fill="url(#clay)"/>
+    <path d="M167 269c49 22 134 21 188-1" fill="none" stroke="#cc8061" stroke-width="8" opacity="0.8"/>
+    <path d="M175 324c40 20 117 21 165 1" fill="none" stroke="#643124" stroke-width="7" opacity="0.75"/>
+
+    <path d="M166 173c11-32 31-63 61-92 16-16 44-5 43 18-1 28-10 55-29 81" fill="none" stroke="url(#pipe)" stroke-width="32"/>
+    <path d="M251 84c4-33 23-55 55-66 24-8 46 12 40 37-10 45-31 87-61 126" fill="none" stroke="url(#pipe)" stroke-width="34"/>
+    <path d="M325 176c11-32 31-63 61-92 16-16 44-5 43 18-2 65-26 125-69 180" fill="none" stroke="url(#pipe)" stroke-width="32"/>
+    <path d="M176 169c29-40 47-65 74-90" fill="none" stroke="#b6fbff" stroke-width="7" opacity="0.75"/>
+    <path d="M263 86c15-31 34-48 60-55" fill="none" stroke="#b6fbff" stroke-width="7" opacity="0.75"/>
+    <path d="M337 169c29-41 48-65 74-90" fill="none" stroke="#b6fbff" stroke-width="7" opacity="0.75"/>
+
+    <circle cx="197" cy="284" r="6" fill="#d18468" stroke="none"/>
+    <circle cx="236" cy="252" r="7" fill="#5d2a20" stroke="none"/>
+    <circle cx="282" cy="296" r="6" fill="#d18468" stroke="none"/>
+    <circle cx="315" cy="334" r="7" fill="#5d2a20" stroke="none"/>
+    <circle cx="220" cy="348" r="6" fill="#d18468" stroke="none"/>
+  </g>
+</svg>
