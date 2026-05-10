@@ -12,8 +12,8 @@ type Quote = {
 
 type MatrixCell = {
   row: FactoryDataRow;
-  inputCost: number;
-  outputValue: number;
+  inputBuyCost: number;
+  outputSellValue: number;
   returnPercent: number;
   priceImpactPercentage: number;
   isComplete: boolean;
@@ -183,9 +183,9 @@ export default function Matrix() {
         const input1Quote = quotes[quoteKey(row.input_token_1, row.input_amount_1)] || null;
         const input2Quote = row.input_token_2 ? quotes[quoteKey(row.input_token_2, row.input_amount_2)] || null : null;
 
-        const outputValue = outputQuote?.output.amount || 0;
-        const inputCost = (input1Quote?.output.amount || 0) + (input2Quote?.output.amount || 0);
-        const returnPercent = inputCost > 0 ? ((outputValue - inputCost) / inputCost) * 100 : 0;
+        const outputSellValue = outputQuote?.output.amount || 0;
+        const inputBuyCost = (input1Quote?.output.amount || 0) + (input2Quote?.output.amount || 0);
+        const returnPercent = inputBuyCost > 0 ? ((outputSellValue - inputBuyCost) / inputBuyCost) * 100 : 0;
         const priceImpactPercentage = Math.max(
           outputQuote?.details?.priceImpactPercentage || 0,
           input1Quote?.details?.priceImpactPercentage || 0,
@@ -194,8 +194,8 @@ export default function Matrix() {
 
         cells[`${row.token}-${row.level}`] = {
           row,
-          inputCost,
-          outputValue,
+          inputBuyCost,
+          outputSellValue,
           returnPercent,
           priceImpactPercentage,
           isComplete: Boolean(outputQuote && input1Quote && (!row.input_token_2 || input2Quote)),
@@ -219,10 +219,10 @@ export default function Matrix() {
         <Card title="Matrix">
           <div className="space-y-3">
             <p className="text-sm text-slate-300">
-              Dynamic matrix showing return percentage by factory and level. Green is profitable. Red is negative. Values use live Craft World TOKEN to COIN exact input quotes.
+              Dynamic matrix showing return percentage by factory and level. Green is profitable. Red is negative.
             </p>
             <p className="text-sm text-yellow-200">
-              All prices are quoted in COIN and include Craft World’s built in 2.5% fee plus impact and slippage returned by the quote call.
+              Outputs use sell quotes: output token → COIN. Inputs use buy cost labels for every input token. All values are quoted in COIN and include Craft World’s built in 2.5% fee plus impact and slippage returned by the quote call.
             </p>
             {error && <p className="text-sm text-red-300">{error}</p>}
             <div className="flex flex-wrap gap-2">
@@ -237,7 +237,7 @@ export default function Matrix() {
               ))}
             </div>
             <p className="text-xs text-slate-400">
-              {quoteLoading ? 'Loading live quote data...' : 'Quotes loaded.'} Showing return as (output COIN value minus input COIN cost) divided by input COIN cost.
+              {quoteLoading ? 'Loading live quote data...' : 'Quotes loaded.'} Showing return as (output sell value minus input buy cost) divided by input buy cost.
             </p>
           </div>
         </Card>
@@ -280,7 +280,7 @@ export default function Matrix() {
                       <td
                         key={`${token}-${level}`}
                         className={`border border-slate-800 px-3 py-2 font-mono ${getCellClass(cell.returnPercent)}`}
-                        title={`Output ${formatNumber(cell.outputValue, 6)} COIN • Inputs ${formatNumber(cell.inputCost, 6)} COIN • Impact ${formatNumber(cell.priceImpactPercentage, 2)}%`}
+                        title={`Output sell value ${formatNumber(cell.outputSellValue, 6)} COIN • Input buy cost ${formatNumber(cell.inputBuyCost, 6)} COIN • Impact ${formatNumber(cell.priceImpactPercentage, 2)}%`}
                       >
                         {cell.returnPercent >= 0 ? '+' : ''}{formatNumber(cell.returnPercent, 2)}%
                       </td>
