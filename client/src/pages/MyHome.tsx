@@ -136,6 +136,24 @@ export default function MyHome() {
   );
   const lastSynced = home.lastSyncedAt ? new Date(home.lastSyncedAt).toLocaleString() : 'Not connected';
 
+  const plotDisplayOrder = ['EARTH_PLOT', 'WATER_PLOT', 'FIRE_PLOT', 'BLUEPRINT_PLOT'];
+  const factoriesByPlot = factories.reduce<Record<string, FactorySummary[]>>((acc, factory) => {
+    const plotKey = factory.landPlotName || 'Unknown plot';
+    if (!acc[plotKey]) acc[plotKey] = [];
+    acc[plotKey].push(factory);
+    return acc;
+  }, {});
+
+  const orderedPlots = Object.entries(factoriesByPlot).sort(([plotA], [plotB]) => {
+    const indexA = plotDisplayOrder.indexOf(plotA);
+    const indexB = plotDisplayOrder.indexOf(plotB);
+    const normalizedIndexA = indexA === -1 ? Number.MAX_SAFE_INTEGER : indexA;
+    const normalizedIndexB = indexB === -1 ? Number.MAX_SAFE_INTEGER : indexB;
+
+    if (normalizedIndexA !== normalizedIndexB) return normalizedIndexA - normalizedIndexB;
+    return plotA.localeCompare(plotB);
+  });
+
   return (
     <Layout>
       <div className="space-y-4">
@@ -241,13 +259,60 @@ export default function MyHome() {
         </Card>
 
         <Card title="My Factories">
-          {factories.length ? (
-            factories.map((f, i) => (
-              <div key={f.id || `factory-${i}`}>
-                {f.areaSymbol || 'Unknown'} • L{f.level || 0} • {f.landPlotName || 'Unknown plot'} • Run {f.currentRunLevel || 0} • Boost{' '}
-                {f.activeBoosts?.[0]?.boostValue || 0}%
-              </div>
-            ))
+          {orderedPlots.length ? (
+            <div className="space-y-4">
+              {orderedPlots.map(([plotName, plotFactories]) => {
+                const sortedFactories = [...plotFactories].sort((a, b) => {
+                  const symbolSort = (a.areaSymbol || '').localeCompare(b.areaSymbol || '');
+                  if (symbolSort !== 0) return symbolSort;
+                  const aDisplayLevel = (a.level ?? -1) + 1;
+                  const bDisplayLevel = (b.level ?? -1) + 1;
+                  return bDisplayLevel - aDisplayLevel;
+                });
+
+                const highestDisplayedLevel = sortedFactories.reduce((maxLevel, factory) => {
+                  const displayLevel = (factory.level ?? -1) + 1;
+                  return displayLevel > maxLevel ? displayLevel : maxLevel;
+                }, 0);
+
+                const activeBoostValues = sortedFactories
+                  .flatMap((factory) => factory.activeBoosts || [])
+                  .map((boost) => boost.boostValue || 0)
+                  .filter((value) => value > 0);
+
+                return (
+                  <div key={plotName} className="space-y-2">
+                    <div className="rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2">
+                      <p className="text-sm font-semibold">{plotName}</p>
+                      <p className="text-xs text-slate-400">
+                        {sortedFactories.length} factories • Highest Lv {highestDisplayedLevel} •{' '}
+                        {activeBoostValues.length
+                          ? `Active boosts: ${activeBoostValues.map((value) => `${value}%`).join(', ')}`
+                          : 'No active boost'}
+                      </p>
+                    </div>
+
+                    <div className="space-y-1">
+                      {sortedFactories.map((factory, index) => {
+                        const displayLevel = (factory.level ?? 0) + 1;
+                        const craftDisplayLevel =
+                          typeof factory.currentRunLevel === 'number' ? factory.currentRunLevel + 1 : null;
+                        const boostValue = factory.activeBoosts?.[0]?.boostValue || 0;
+
+                        return (
+                          <div key={factory.id || `${plotName}-factory-${index}`} className="rounded border border-slate-800 px-3 py-2 text-sm">
+                            <span className="font-semibold">{factory.areaSymbol || 'Unknown'}</span>
+                            <span className="text-slate-300"> • Lv {displayLevel}</span>
+                            {craftDisplayLevel !== null && <span className="text-slate-300"> • Craft Lv {craftDisplayLevel}</span>}
+                            {boostValue > 0 ? <span className="text-slate-400"> • Boost {boostValue}%</span> : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
             <EmptyState>No factories found yet.</EmptyState>
           )}
