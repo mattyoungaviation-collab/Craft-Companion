@@ -56,7 +56,9 @@ type HomeData = {
 
 const factoryImages: Record<string, string> = {
   CLAY: '/factories/clay.svg',
+  COPPER: '/factories/copper.svg',
   MUD: '/factories/mud.svg',
+  SAND: '/factories/sand.svg',
 };
 
 function EmptyState({ children }: { children: string }) {
