@@ -139,7 +139,7 @@ export default function Profitability() {
         symbol: selectedRow.output_token,
         amount: selectedRow.output_amount,
         key: quoteKey(selectedRow.output_token, selectedRow.output_amount),
-        label: 'Output Value',
+        label: 'Output Sell Value',
       },
       {
         symbol: selectedRow.input_token_1,
@@ -235,6 +235,9 @@ export default function Profitability() {
               Select one of your live Craft World factories. The calculator matches your owned factory level to the uploaded factory CSV.
             </p>
             <p className="text-sm text-yellow-200">
+              Output value uses the sell quote: output token → COIN. Input costs use the same token → COIN value so returns compare against what those inputs are worth in COIN.
+            </p>
+            <p className="text-sm text-yellow-200">
               All prices are quoted in COIN using Craft World exact input quotes. Values include the built in 2.5% fee plus impact and slippage returned by Craft World.
             </p>
 
@@ -290,21 +293,21 @@ export default function Profitability() {
             <Card title="Live COIN Quotes">
               <div className="space-y-2 text-sm">
                 {quoteLoading && <p className="text-slate-400">Loading Craft World quotes...</p>}
-                <QuoteLine label="Output" quote={outputQuote} />
-                <QuoteLine label="Input 1" quote={input1Quote} />
-                {selectedRow.input_token_2 && <QuoteLine label="Input 2" quote={input2Quote} />}
-                {selectedRow.upgrade_token && <QuoteLine label="Upgrade" quote={upgradeQuote} />}
+                <QuoteLine label="Output Sell Value" quote={outputQuote} />
+                <QuoteLine label="Input 1 Value" quote={input1Quote} />
+                {selectedRow.input_token_2 && <QuoteLine label="Input 2 Value" quote={input2Quote} />}
+                {selectedRow.upgrade_token && <QuoteLine label="Upgrade Value" quote={upgradeQuote} />}
               </div>
             </Card>
 
             <Card title="Results">
               <div className="grid gap-2 text-sm md:grid-cols-2">
-                <p>Input Cost: {formatNumber(inputCost)} COIN</p>
-                <p>Output Value: {formatNumber(outputValue)} COIN</p>
+                <p>Input Value: {formatNumber(inputCost)} COIN</p>
+                <p>Output Sell Value: {formatNumber(outputValue)} COIN</p>
                 <p>Profit Per Run: {formatNumber(profitPerRun)} COIN</p>
                 <p>Profit Per Hour: {formatNumber(profitPerHour)} COIN</p>
                 <p>Runs Per Hour: {formatNumber(runsPerHour, 4)}</p>
-                <p>Upgrade Cost: {formatNumber(upgradeCost)} COIN</p>
+                <p>Upgrade Value: {formatNumber(upgradeCost)} COIN</p>
               </div>
             </Card>
           </>
