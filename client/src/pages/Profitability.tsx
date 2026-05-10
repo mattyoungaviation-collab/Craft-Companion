@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Card from '../components/Card';
 import Layout from '../components/Layout';
-import { getCraftworldHome } from '../services/api';
+import { getCraftworldHome, getCraftworldQuote } from '../services/api';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
 
 type OwnedFactory = {
@@ -23,8 +23,17 @@ type OwnedFactoryOption = {
   matchingCsvRow: FactoryDataRow | null;
 };
 
-function formatNumber(value: number) {
-  return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0';
+type Quote = {
+  type: string;
+  input: { symbol: string; amount: number };
+  output: { symbol: string; amount: number };
+  details?: { priceImpactPercentage?: number };
+};
+
+type QuoteMap = Record<string, Quote | null>;
+
+function formatNumber(value: number, digits = 6) {
+  return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: digits }) : '0';
 }
 
 function formatFactoryLabel(option: OwnedFactoryOption) {
@@ -32,16 +41,30 @@ function formatFactoryLabel(option: OwnedFactoryOption) {
   return `${option.plotName} • ${option.symbol} • Lv ${option.displayLevel}${craftLevel}`;
 }
 
+function quoteKey(symbol: string, amount: number) {
+  return `${symbol.toUpperCase()}-${amount}`;
+}
+
+function QuoteLine({ label, quote }: { label: string; quote: Quote | null | undefined }) {
+  if (!quote) return <p>{label}: Quote unavailable</p>;
+
+  return (
+    <p>
+      {label}: {formatNumber(quote.input.amount)} {quote.input.symbol} valued at {formatNumber(quote.output.amount)} {quote.output.symbol} • Impact{' '}
+      {formatNumber(quote.details?.priceImpactPercentage || 0, 2)}%
+    </p>
+  );
+}
+
 export default function Profitability() {
   const [rows, setRows] = useState<FactoryDataRow[]>([]);
   const [ownedFactories, setOwnedFactories] = useState<OwnedFactory[]>([]);
   const [selectedFactoryKey, setSelectedFactoryKey] = useState('');
-  const [outputPrice, setOutputPrice] = useState(0);
-  const [input1Price, setInput1Price] = useState(0);
-  const [input2Price, setInput2Price] = useState(0);
-  const [upgradePrice, setUpgradePrice] = useState(0);
+  const [quotes, setQuotes] = useState<QuoteMap>({});
   const [loading, setLoading] = useState(true);
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState('');
+  const [quoteError, setQuoteError] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -108,12 +131,92 @@ export default function Profitability() {
 
   const selectedRow = selectedFactory?.matchingCsvRow || null;
 
-  const inputCost = (selectedRow?.input_amount_1 || 0) * input1Price + (selectedRow?.input_amount_2 || 0) * input2Price;
-  const outputValue = (selectedRow?.output_amount || 0) * outputPrice;
+  const quoteRequests = useMemo(() => {
+    if (!selectedRow) return [] as Array<{ symbol: string; amount: number; key: string; label: string }>;
+
+    const requests = [
+      {
+        symbol: selectedRow.output_token,
+        amount: selectedRow.output_amount,
+        key: quoteKey(selectedRow.output_token, selectedRow.output_amount),
+        label: 'Output Value',
+      },
+      {
+        symbol: selectedRow.input_token_1,
+        amount: selectedRow.input_amount_1,
+        key: quoteKey(selectedRow.input_token_1, selectedRow.input_amount_1),
+        label: 'Input 1 Cost',
+      },
+    ];
+
+    if (selectedRow.input_token_2 && selectedRow.input_amount_2 > 0) {
+      requests.push({
+        symbol: selectedRow.input_token_2,
+        amount: selectedRow.input_amount_2,
+        key: quoteKey(selectedRow.input_token_2, selectedRow.input_amount_2),
+        label: 'Input 2 Cost',
+      });
+    }
+
+    if (selectedRow.upgrade_token && selectedRow.upgrade_amount > 0) {
+      requests.push({
+        symbol: selectedRow.upgrade_token,
+        amount: selectedRow.upgrade_amount,
+        key: quoteKey(selectedRow.upgrade_token, selectedRow.upgrade_amount),
+        label: 'Upgrade Cost',
+      });
+    }
+
+    return requests;
+  }, [selectedRow]);
+
+  useEffect(() => {
+    if (!quoteRequests.length) return;
+
+    const loadQuotes = async () => {
+      setQuoteLoading(true);
+      setQuoteError('');
+
+      try {
+        const entries = await Promise.all(
+          quoteRequests.map(async (request) => {
+            try {
+              const quote = await getCraftworldQuote({
+                inputSymbol: request.symbol,
+                outputSymbol: 'COIN',
+                inputAmount: request.amount,
+              });
+              return [request.key, quote] as const;
+            } catch {
+              return [request.key, null] as const;
+            }
+          }),
+        );
+
+        setQuotes((current) => ({ ...current, ...Object.fromEntries(entries) }));
+      } catch {
+        setQuoteError('Unable to load one or more Craft World quotes.');
+      } finally {
+        setQuoteLoading(false);
+      }
+    };
+
+    loadQuotes();
+  }, [quoteRequests]);
+
+  const getQuote = (symbol: string, amount: number) => quotes[quoteKey(symbol, amount)] || null;
+
+  const outputQuote = selectedRow ? getQuote(selectedRow.output_token, selectedRow.output_amount) : null;
+  const input1Quote = selectedRow ? getQuote(selectedRow.input_token_1, selectedRow.input_amount_1) : null;
+  const input2Quote = selectedRow?.input_token_2 ? getQuote(selectedRow.input_token_2, selectedRow.input_amount_2) : null;
+  const upgradeQuote = selectedRow?.upgrade_token ? getQuote(selectedRow.upgrade_token, selectedRow.upgrade_amount) : null;
+
+  const inputCost = (input1Quote?.output.amount || 0) + (input2Quote?.output.amount || 0);
+  const outputValue = outputQuote?.output.amount || 0;
   const profitPerRun = outputValue - inputCost;
   const runsPerHour = selectedRow?.duration_min ? 60 / selectedRow.duration_min : 0;
   const profitPerHour = profitPerRun * runsPerHour;
-  const upgradeCost = (selectedRow?.upgrade_amount || 0) * upgradePrice;
+  const upgradeCost = upgradeQuote?.output.amount || 0;
 
   if (loading) {
     return (
@@ -131,8 +234,12 @@ export default function Profitability() {
             <p className="text-sm text-slate-300">
               Select one of your live Craft World factories. The calculator matches your owned factory level to the uploaded factory CSV.
             </p>
+            <p className="text-sm text-yellow-200">
+              All prices are quoted in COIN using Craft World exact input quotes. Values include the built in 2.5% fee plus impact and slippage returned by Craft World.
+            </p>
 
             {error && <p className="text-sm text-red-300">{error}</p>}
+            {quoteError && <p className="text-sm text-red-300">{quoteError}</p>}
 
             {!ownedFactoryOptions.length ? (
               <p className="text-sm text-slate-400">No live factories were found for this account yet.</p>
@@ -172,76 +279,32 @@ export default function Profitability() {
                 <p>Owned Display Level: {selectedFactory.displayLevel}</p>
                 <p>Craft Level: {selectedFactory.craftDisplayLevel || 'N/A'}</p>
                 <p>CSV Level: {selectedRow.level}</p>
-                <p>Duration: {formatNumber(selectedRow.duration_min)} min</p>
+                <p>Duration: {formatNumber(selectedRow.duration_min, 2)} min</p>
                 <p>Output: {formatNumber(selectedRow.output_amount)} {selectedRow.output_token}</p>
-                <p>
-                  Input 1: {formatNumber(selectedRow.input_amount_1)} {selectedRow.input_token_1}
-                </p>
-                <p>
-                  Input 2: {selectedRow.input_token_2 ? `${formatNumber(selectedRow.input_amount_2)} ${selectedRow.input_token_2}` : 'N/A'}
-                </p>
-                <p>
-                  Upgrade: {selectedRow.upgrade_token ? `${formatNumber(selectedRow.upgrade_amount)} ${selectedRow.upgrade_token}` : 'N/A'}
-                </p>
+                <p>Input 1: {formatNumber(selectedRow.input_amount_1)} {selectedRow.input_token_1}</p>
+                <p>Input 2: {selectedRow.input_token_2 ? `${formatNumber(selectedRow.input_amount_2)} ${selectedRow.input_token_2}` : 'N/A'}</p>
+                <p>Upgrade: {selectedRow.upgrade_token ? `${formatNumber(selectedRow.upgrade_amount)} ${selectedRow.upgrade_token}` : 'N/A'}</p>
               </div>
             </Card>
 
-            <Card title="Price Inputs">
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-1 text-sm">
-                  <span>{selectedRow.output_token} price</span>
-                  <input
-                    type="number"
-                    value={outputPrice}
-                    onChange={(event) => setOutputPrice(Number(event.target.value) || 0)}
-                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
-                  />
-                </label>
-
-                <label className="space-y-1 text-sm">
-                  <span>{selectedRow.input_token_1} price</span>
-                  <input
-                    type="number"
-                    value={input1Price}
-                    onChange={(event) => setInput1Price(Number(event.target.value) || 0)}
-                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
-                  />
-                </label>
-
-                {selectedRow.input_token_2 && (
-                  <label className="space-y-1 text-sm">
-                    <span>{selectedRow.input_token_2} price</span>
-                    <input
-                      type="number"
-                      value={input2Price}
-                      onChange={(event) => setInput2Price(Number(event.target.value) || 0)}
-                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
-                    />
-                  </label>
-                )}
-
-                {selectedRow.upgrade_token && (
-                  <label className="space-y-1 text-sm">
-                    <span>{selectedRow.upgrade_token} price</span>
-                    <input
-                      type="number"
-                      value={upgradePrice}
-                      onChange={(event) => setUpgradePrice(Number(event.target.value) || 0)}
-                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
-                    />
-                  </label>
-                )}
+            <Card title="Live COIN Quotes">
+              <div className="space-y-2 text-sm">
+                {quoteLoading && <p className="text-slate-400">Loading Craft World quotes...</p>}
+                <QuoteLine label="Output" quote={outputQuote} />
+                <QuoteLine label="Input 1" quote={input1Quote} />
+                {selectedRow.input_token_2 && <QuoteLine label="Input 2" quote={input2Quote} />}
+                {selectedRow.upgrade_token && <QuoteLine label="Upgrade" quote={upgradeQuote} />}
               </div>
             </Card>
 
             <Card title="Results">
               <div className="grid gap-2 text-sm md:grid-cols-2">
-                <p>Input Cost: {formatNumber(inputCost)}</p>
-                <p>Output Value: {formatNumber(outputValue)}</p>
-                <p>Profit Per Run: {formatNumber(profitPerRun)}</p>
-                <p>Profit Per Hour: {formatNumber(profitPerHour)}</p>
-                <p>Runs Per Hour: {formatNumber(runsPerHour)}</p>
-                <p>Upgrade Cost: {formatNumber(upgradeCost)}</p>
+                <p>Input Cost: {formatNumber(inputCost)} COIN</p>
+                <p>Output Value: {formatNumber(outputValue)} COIN</p>
+                <p>Profit Per Run: {formatNumber(profitPerRun)} COIN</p>
+                <p>Profit Per Hour: {formatNumber(profitPerHour)} COIN</p>
+                <p>Runs Per Hour: {formatNumber(runsPerHour, 4)}</p>
+                <p>Upgrade Cost: {formatNumber(upgradeCost)} COIN</p>
               </div>
             </Card>
           </>
