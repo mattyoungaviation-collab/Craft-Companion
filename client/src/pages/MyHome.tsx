@@ -55,6 +55,7 @@ type HomeData = {
 };
 
 const factoryImages: Record<string, string> = {
+  CLAY: '/factories/clay.svg',
   MUD: '/factories/mud.svg',
 };
 
