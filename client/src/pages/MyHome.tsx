@@ -54,6 +54,10 @@ type HomeData = {
   currencies?: CurrencyBalance[];
 };
 
+const factoryImages: Record<string, string> = {
+  MUD: '/factories/mud.svg',
+};
+
 function EmptyState({ children }: { children: string }) {
   return <p className="text-sm text-slate-400">{children}</p>;
 }
@@ -65,6 +69,11 @@ function displayNumber(value: unknown) {
 function ipfsToHttp(url?: string) {
   if (!url) return '';
   return url.startsWith('ipfs://') ? url.replace('ipfs://', 'https://ipfs.io/ipfs/') : url;
+}
+
+function getFactoryImage(symbol?: string) {
+  if (!symbol) return '';
+  return factoryImages[symbol.toUpperCase()] || '';
 }
 
 export default function MyHome() {
@@ -292,19 +301,32 @@ export default function MyHome() {
                       </p>
                     </div>
 
-                    <div className="space-y-1">
+                    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                       {sortedFactories.map((factory, index) => {
                         const displayLevel = (factory.level ?? 0) + 1;
                         const craftDisplayLevel =
                           typeof factory.currentRunLevel === 'number' ? factory.currentRunLevel + 1 : null;
                         const boostValue = factory.activeBoosts?.[0]?.boostValue || 0;
+                        const symbol = factory.areaSymbol || 'Unknown';
+                        const factoryImage = getFactoryImage(symbol);
 
                         return (
-                          <div key={factory.id || `${plotName}-factory-${index}`} className="rounded border border-slate-800 px-3 py-2 text-sm">
-                            <span className="font-semibold">{factory.areaSymbol || 'Unknown'}</span>
-                            <span className="text-slate-300"> • Lv {displayLevel}</span>
-                            {craftDisplayLevel !== null && <span className="text-slate-300"> • Craft Lv {craftDisplayLevel}</span>}
-                            {boostValue > 0 ? <span className="text-slate-400"> • Boost {boostValue}%</span> : null}
+                          <div key={factory.id || `${plotName}-factory-${index}`} className="flex items-center gap-3 rounded border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm">
+                            {factoryImage ? (
+                              <img src={factoryImage} alt={`${symbol} factory`} className="h-14 w-14 shrink-0 rounded-lg border border-slate-700 bg-slate-900 object-contain p-1" />
+                            ) : (
+                              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-xs font-bold text-slate-500">
+                                {symbol.slice(0, 3)}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="font-semibold">{symbol}</p>
+                              <p className="text-slate-300">
+                                Lv {displayLevel}
+                                {craftDisplayLevel !== null ? ` • Craft Lv ${craftDisplayLevel}` : ''}
+                              </p>
+                              {boostValue > 0 ? <p className="text-slate-400">Boost {boostValue}%</p> : null}
+                            </div>
                           </div>
                         );
                       })}
