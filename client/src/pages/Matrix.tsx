@@ -57,6 +57,7 @@ const tokenOrder = [
 
 const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 const REFRESH_SECONDS = 150;
+const EMPTY_MATRIX_CACHE: MatrixCachePayload = { updatedAt: '', selectedGroup: undefined, cells: {} };
 
 function formatNumber(value: number, digits = 2) {
   return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: digits }) : '0';
@@ -124,7 +125,7 @@ export default function Matrix() {
       setLoading(true);
       setError('');
       try {
-        const [factoryRows, cache] = await Promise.all([loadFactoryData(), loadMatrixCache().catch(() => ({ updatedAt: '', cells: {} }))]);
+        const [factoryRows, cache] = await Promise.all([loadFactoryData(), loadMatrixCache().catch(() => EMPTY_MATRIX_CACHE)]);
         setRows(factoryRows);
         setMatrixCells((cache.cells || {}) as Record<string, MatrixCell>);
         matrixRef.current = (cache.cells || {}) as Record<string, MatrixCell>;
