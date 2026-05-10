@@ -61,6 +61,7 @@ const factoryImages: Record<string, string> = {
   SAND: '/factories/sand.svg',
   SCREWS: '/factories/screws.svg',
   STEEL: '/factories/steel.svg',
+  SCREWS: '/factories/screws.svg',
 };
 
 function EmptyState({ children }: { children: string }) {
