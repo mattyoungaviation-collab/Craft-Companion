@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Card from '../components/Card';
 import Layout from '../components/Layout';
-import { getCraftworldHome, getCraftworldQuote } from '../services/api';
+import { getCraftworldBuyQuote, getCraftworldHome, getCraftworldQuote } from '../services/api';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
 import { getRunsPerHourWithWorkshop, getWorkshopSpeedBoostPercent, type WorkshopItem } from '../services/workshopModifiers';
 
@@ -19,9 +19,11 @@ type OwnedFactoryOption = {
   factory: OwnedFactory;
   symbol: string;
   displayLevel: number;
+  nextDisplayLevel: number;
   craftDisplayLevel: number | null;
   plotName: string;
   matchingCsvRow: FactoryDataRow | null;
+  nextCsvRow: FactoryDataRow | null;
 };
 
 type Quote = {
@@ -32,6 +34,13 @@ type Quote = {
 };
 
 type QuoteMap = Record<string, Quote | null>;
+
+type QuoteRequest = {
+  type: 'sell' | 'buy';
+  symbol: string;
+  amount: number;
+  key: string;
+};
 
 type ProfitAdvisorRow = {
   option: OwnedFactoryOption;
@@ -57,25 +66,35 @@ function formatFactoryLabel(option: OwnedFactoryOption) {
   return `${option.plotName} • ${option.symbol} • Lv ${option.displayLevel}${craftLevel}`;
 }
 
-function quoteKey(symbol: string, amount: number) {
-  return `${symbol.toUpperCase()}-${amount}`;
+function sellQuoteKey(symbol: string, amount: number) {
+  return `SELL-${symbol.toUpperCase()}-${amount}`;
 }
 
-function getRowQuoteRequests(row: FactoryDataRow) {
-  const requests = [
-    { symbol: row.output_token, amount: row.output_amount, key: quoteKey(row.output_token, row.output_amount), label: 'Output Sell Value' },
-    { symbol: row.input_token_1, amount: row.input_amount_1, key: quoteKey(row.input_token_1, row.input_amount_1), label: 'Input 1 Cost' },
+function buyQuoteKey(symbol: string, amount: number) {
+  return `BUY-COIN-${symbol.toUpperCase()}-${amount}`;
+}
+
+function getRecipeQuoteRequests(row: FactoryDataRow) {
+  const requests: QuoteRequest[] = [
+    { type: 'sell', symbol: row.output_token, amount: row.output_amount, key: sellQuoteKey(row.output_token, row.output_amount) },
+    { type: 'sell', symbol: row.input_token_1, amount: row.input_amount_1, key: sellQuoteKey(row.input_token_1, row.input_amount_1) },
   ];
 
   if (row.input_token_2 && row.input_amount_2 > 0) {
-    requests.push({ symbol: row.input_token_2, amount: row.input_amount_2, key: quoteKey(row.input_token_2, row.input_amount_2), label: 'Input 2 Cost' });
-  }
-
-  if (row.upgrade_token && row.upgrade_amount > 0) {
-    requests.push({ symbol: row.upgrade_token, amount: row.upgrade_amount, key: quoteKey(row.upgrade_token, row.upgrade_amount), label: 'Upgrade Cost' });
+    requests.push({ type: 'sell', symbol: row.input_token_2, amount: row.input_amount_2, key: sellQuoteKey(row.input_token_2, row.input_amount_2) });
   }
 
   return requests;
+}
+
+function getUpgradeBuyQuoteRequest(row: FactoryDataRow | null) {
+  if (!row?.upgrade_token || row.upgrade_amount <= 0) return null;
+  return {
+    type: 'buy' as const,
+    symbol: row.upgrade_token,
+    amount: row.upgrade_amount,
+    key: buyQuoteKey(row.upgrade_token, row.upgrade_amount),
+  };
 }
 
 function QuoteLine({ label, quote }: { label: string; quote: Quote | null | undefined }) {
@@ -83,7 +102,7 @@ function QuoteLine({ label, quote }: { label: string; quote: Quote | null | unde
 
   return (
     <p>
-      {label}: {formatNumber(quote.input.amount)} {quote.input.symbol} valued at {formatNumber(quote.output.amount)} {quote.output.symbol} • Impact{' '}
+      {label}: {formatNumber(quote.input.amount)} {quote.input.symbol} for {formatNumber(quote.output.amount)} {quote.output.symbol} • Impact{' '}
       {formatNumber(quote.details?.priceImpactPercentage || 0, 2)}%
     </p>
   );
@@ -126,18 +145,22 @@ export default function Profitability() {
       .map((factory, index) => {
         const symbol = String(factory.areaSymbol || '').trim().toUpperCase();
         const displayLevel = typeof factory.level === 'number' ? factory.level + 1 : 0;
+        const nextDisplayLevel = displayLevel + 1;
         const craftDisplayLevel = typeof factory.currentRunLevel === 'number' ? factory.currentRunLevel + 1 : null;
         const plotName = factory.landPlotName || 'Unknown plot';
         const matchingCsvRow = rows.find((row) => row.token === symbol && row.level === displayLevel) || null;
+        const nextCsvRow = rows.find((row) => row.token === symbol && row.level === nextDisplayLevel) || null;
 
         return {
           key: factory.id || `${plotName}-${symbol}-${displayLevel}-${index}`,
           factory,
           symbol,
           displayLevel,
+          nextDisplayLevel,
           craftDisplayLevel,
           plotName,
           matchingCsvRow,
+          nextCsvRow,
         };
       })
       .filter((option) => option.symbol)
@@ -166,23 +189,27 @@ export default function Profitability() {
   );
 
   const selectedRow = selectedFactory?.matchingCsvRow || null;
+  const selectedUpgradeRow = selectedFactory?.nextCsvRow || null;
 
   const quoteRequests = useMemo(() => {
-    const byKey = new Map<string, { symbol: string; amount: number; key: string; label: string }>();
+    const byKey = new Map<string, QuoteRequest>();
 
     if (selectedRow) {
-      getRowQuoteRequests(selectedRow).forEach((request) => byKey.set(request.key, request));
+      getRecipeQuoteRequests(selectedRow).forEach((request) => byKey.set(request.key, request));
     }
+
+    const selectedUpgradeRequest = getUpgradeBuyQuoteRequest(selectedUpgradeRow);
+    if (selectedUpgradeRequest) byKey.set(selectedUpgradeRequest.key, selectedUpgradeRequest);
 
     ownedFactoryOptions.forEach((option) => {
       if (!option.matchingCsvRow) return;
-      getRowQuoteRequests(option.matchingCsvRow).forEach((request) => {
+      getRecipeQuoteRequests(option.matchingCsvRow).forEach((request) => {
         if (!byKey.has(request.key)) byKey.set(request.key, request);
       });
     });
 
     return Array.from(byKey.values());
-  }, [ownedFactoryOptions, selectedRow]);
+  }, [ownedFactoryOptions, selectedRow, selectedUpgradeRow]);
 
   useEffect(() => {
     if (!quoteRequests.length) return;
@@ -201,11 +228,17 @@ export default function Profitability() {
           const entries = await Promise.all(
             batch.map(async (request) => {
               try {
-                const quote = await getCraftworldQuote({
-                  inputSymbol: request.symbol,
-                  outputSymbol: 'COIN',
-                  inputAmount: request.amount,
-                });
+                const quote = request.type === 'buy'
+                  ? await getCraftworldBuyQuote({
+                      inputSymbol: 'COIN',
+                      outputSymbol: request.symbol,
+                      outputAmount: request.amount,
+                    })
+                  : await getCraftworldQuote({
+                      inputSymbol: request.symbol,
+                      outputSymbol: 'COIN',
+                      inputAmount: request.amount,
+                    });
                 return [request.key, quote] as const;
               } catch {
                 return [request.key, null] as const;
@@ -230,16 +263,17 @@ export default function Profitability() {
     };
   }, [quoteRequests]);
 
-  const getQuote = (symbol: string, amount: number) => quotes[quoteKey(symbol, amount)] || null;
+  const getSellQuote = (symbol: string, amount: number) => quotes[sellQuoteKey(symbol, amount)] || null;
+  const getBuyQuote = (symbol: string, amount: number) => quotes[buyQuoteKey(symbol, amount)] || null;
 
   const advisorRows = useMemo<ProfitAdvisorRow[]>(() => {
     return ownedFactoryOptions
       .filter((option): option is OwnedFactoryOption & { matchingCsvRow: FactoryDataRow } => Boolean(option.matchingCsvRow))
       .map((option) => {
         const row = option.matchingCsvRow;
-        const outputQuote = getQuote(row.output_token, row.output_amount);
-        const input1Quote = getQuote(row.input_token_1, row.input_amount_1);
-        const input2Quote = row.input_token_2 ? getQuote(row.input_token_2, row.input_amount_2) : null;
+        const outputQuote = getSellQuote(row.output_token, row.output_amount);
+        const input1Quote = getSellQuote(row.input_token_1, row.input_amount_1);
+        const input2Quote = row.input_token_2 ? getSellQuote(row.input_token_2, row.input_amount_2) : null;
         const outputValue = outputQuote?.output.amount || 0;
         const inputCost = (input1Quote?.output.amount || 0) + (input2Quote?.output.amount || 0);
         const profitPerRun = outputValue - inputCost;
@@ -269,10 +303,10 @@ export default function Profitability() {
   const missingCsvMatches = ownedFactoryOptions.filter((option) => !option.matchingCsvRow).length;
   const readyAdvisorRows = advisorRows.filter((row) => !row.missingQuote);
 
-  const outputQuote = selectedRow ? getQuote(selectedRow.output_token, selectedRow.output_amount) : null;
-  const input1Quote = selectedRow ? getQuote(selectedRow.input_token_1, selectedRow.input_amount_1) : null;
-  const input2Quote = selectedRow?.input_token_2 ? getQuote(selectedRow.input_token_2, selectedRow.input_amount_2) : null;
-  const upgradeQuote = selectedRow?.upgrade_token ? getQuote(selectedRow.upgrade_token, selectedRow.upgrade_amount) : null;
+  const outputQuote = selectedRow ? getSellQuote(selectedRow.output_token, selectedRow.output_amount) : null;
+  const input1Quote = selectedRow ? getSellQuote(selectedRow.input_token_1, selectedRow.input_amount_1) : null;
+  const input2Quote = selectedRow?.input_token_2 ? getSellQuote(selectedRow.input_token_2, selectedRow.input_amount_2) : null;
+  const upgradeQuote = selectedUpgradeRow?.upgrade_token ? getBuyQuote(selectedUpgradeRow.upgrade_token, selectedUpgradeRow.upgrade_amount) : null;
   const selectedWorkshopBoostPercent = selectedRow ? getWorkshopSpeedBoostPercent(selectedRow.token, workshop) : 0;
 
   const inputCost = (input1Quote?.output.amount || 0) + (input2Quote?.output.amount || 0);
@@ -280,7 +314,7 @@ export default function Profitability() {
   const profitPerRun = outputValue - inputCost;
   const runsPerHour = selectedRow ? getRunsPerHourWithWorkshop(selectedRow.duration_min, selectedRow.token, workshop) : 0;
   const profitPerHour = profitPerRun * runsPerHour;
-  const upgradeCost = upgradeQuote?.output.amount || 0;
+  const upgradeCost = upgradeQuote?.input.amount || 0;
 
   if (loading) {
     return (
@@ -369,10 +403,10 @@ export default function Profitability() {
               Select one of your live Craft World factories. The calculator matches your owned factory level to the uploaded factory CSV.
             </p>
             <p className="text-sm text-yellow-200">
-              Output value uses the sell quote: output token → COIN. Input costs use the same token → COIN value so returns compare against what those inputs are worth in COIN.
+              Output value uses the sell quote: output token to COIN. Input costs use the same token to COIN value so returns compare against what those inputs are worth in COIN.
             </p>
             <p className="text-sm text-yellow-200">
-              Profit per hour includes your workshop speed boost for the factory resource.
+              Upgrade requirement uses the next CSV level row. Profit per hour includes your workshop speed boost for the factory resource.
             </p>
 
             {error && <p className="text-sm text-red-300">{error}</p>}
@@ -414,6 +448,7 @@ export default function Profitability() {
                 <p>Plot: {selectedFactory.plotName}</p>
                 <p>Factory: {selectedFactory.symbol}</p>
                 <p>Owned Display Level: {selectedFactory.displayLevel}</p>
+                <p>Next Display Level: {selectedFactory.nextDisplayLevel}</p>
                 <p>Craft Level: {selectedFactory.craftDisplayLevel || 'N/A'}</p>
                 <p>CSV Level: {selectedRow.level}</p>
                 <p>Original Duration: {formatNumber(selectedRow.duration_min, 2)} min</p>
@@ -421,7 +456,7 @@ export default function Profitability() {
                 <p>Output: {formatNumber(selectedRow.output_amount)} {selectedRow.output_token}</p>
                 <p>Input 1: {formatNumber(selectedRow.input_amount_1)} {selectedRow.input_token_1}</p>
                 <p>Input 2: {selectedRow.input_token_2 ? `${formatNumber(selectedRow.input_amount_2)} ${selectedRow.input_token_2}` : 'N/A'}</p>
-                <p>Upgrade: {selectedRow.upgrade_token ? `${formatNumber(selectedRow.upgrade_amount)} ${selectedRow.upgrade_token}` : 'N/A'}</p>
+                <p>Upgrade Requires: {selectedUpgradeRow?.upgrade_token ? `${formatNumber(selectedUpgradeRow.upgrade_amount)} ${selectedUpgradeRow.upgrade_token}` : 'No next CSV row'}</p>
               </div>
             </Card>
 
@@ -431,7 +466,7 @@ export default function Profitability() {
                 <QuoteLine label="Output Sell Value" quote={outputQuote} />
                 <QuoteLine label="Input 1 Value" quote={input1Quote} />
                 {selectedRow.input_token_2 && <QuoteLine label="Input 2 Value" quote={input2Quote} />}
-                {selectedRow.upgrade_token && <QuoteLine label="Upgrade Value" quote={upgradeQuote} />}
+                {selectedUpgradeRow?.upgrade_token && <QuoteLine label="Upgrade Buy Cost" quote={upgradeQuote} />}
               </div>
             </Card>
 
@@ -442,7 +477,7 @@ export default function Profitability() {
                 <p>Profit Per Run: {formatNumber(profitPerRun)} COIN</p>
                 <p>Profit Per Hour: {formatNumber(profitPerHour)} COIN</p>
                 <p>Runs Per Hour: {formatNumber(runsPerHour, 4)}</p>
-                <p>Upgrade Value: {formatNumber(upgradeCost)} COIN</p>
+                <p>Upgrade Buy Cost: {formatNumber(upgradeCost)} COIN</p>
               </div>
             </Card>
           </>
