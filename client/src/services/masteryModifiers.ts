@@ -1,6 +1,9 @@
 export type ProficiencyItem = {
   symbol?: string;
+  token?: string;
+  resourceSymbol?: string;
   claimedLevel?: number;
+  level?: number;
   collectedAmount?: number;
 };
 
@@ -18,15 +21,29 @@ const YIELD_BONUS_BY_LEVEL: Record<number, number> = {
 };
 
 function normalizeSymbol(symbol?: string) {
-  return String(symbol || '').trim().toUpperCase();
+  return String(symbol || '')
+    .trim()
+    .toUpperCase()
+    .replace(/^TOKEN_/, '')
+    .replace(/^RESOURCE_/, '')
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+function getProficiencySymbol(item: ProficiencyItem) {
+  return normalizeSymbol(item.symbol || item.token || item.resourceSymbol);
+}
+
+function getProficiencyClaimedLevel(item?: ProficiencyItem) {
+  const rawLevel = Number(item?.claimedLevel ?? item?.level ?? 0);
+  const level = Math.floor(rawLevel);
+  if (!Number.isFinite(level) || level <= 0) return 0;
+  return Math.min(level, 10);
 }
 
 export function getMasteryLevel(symbol: string, proficiencies: ProficiencyItem[]) {
   const normalized = normalizeSymbol(symbol);
-  const item = proficiencies.find((entry) => normalizeSymbol(entry.symbol) === normalized);
-  const level = Math.floor(Number(item?.claimedLevel || 0));
-  if (!Number.isFinite(level) || level <= 0) return 0;
-  return Math.min(level, 10);
+  const item = proficiencies.find((entry) => getProficiencySymbol(entry) === normalized);
+  return getProficiencyClaimedLevel(item);
 }
 
 export function getMasteryYieldBonusPercent(symbol: string, proficiencies: ProficiencyItem[]) {
