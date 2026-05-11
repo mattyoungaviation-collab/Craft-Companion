@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import CreateAccount from './pages/CreateAccount';
+import InventoryValue from './pages/InventoryValue';
 import Landing from './pages/Landing';
 import Matrix from './pages/Matrix';
 import MyHome from './pages/MyHome';
@@ -27,6 +28,14 @@ export default function App() {
           element={(
             <ProtectedRoute>
               <Profitability />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/inventory-value"
+          element={(
+            <ProtectedRoute>
+              <InventoryValue />
             </ProtectedRoute>
           )}
         />
