@@ -3,6 +3,7 @@ import Card from '../components/Card';
 import Layout from '../components/Layout';
 import { getCraftworldBuyQuote, getCraftworldHome, getCraftworldQuote } from '../services/api';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
+import { applyMasteryInputReduction, getMasteryInputReductionPercent, type ProficiencyItem } from '../services/masteryModifiers';
 import { getRunsPerHourWithWorkshop, getWorkshopSpeedBoostPercent, type WorkshopItem } from '../services/workshopModifiers';
 
 type OwnedFactory = { id?: string; areaSymbol?: string; level?: number; landPlotName?: string };
@@ -34,6 +35,8 @@ type AdvisorRow = {
   currentProfitPerHour: number;
   nextProfitPerHour: number;
   workshopBoostPercent: number;
+  currentMasteryText: string;
+  nextMasteryText: string;
   breakEvenHours: number;
   impact: number;
   ready: boolean;
@@ -73,22 +76,36 @@ function inventoryMap(items: ResourceAmount[]) {
   }, {});
 }
 
-function recipeRequests(row?: FactoryDataRow | null) {
+function adjustedInputAmount(symbol: string, amount: number, proficiencies: ProficiencyItem[]) {
+  return applyMasteryInputReduction(amount, symbol, proficiencies);
+}
+
+function masteryText(row: FactoryDataRow, proficiencies: ProficiencyItem[]) {
+  const first = getMasteryInputReductionPercent(row.input_token_1, proficiencies);
+  const second = row.input_token_2 ? getMasteryInputReductionPercent(row.input_token_2, proficiencies) : null;
+  return second === null ? `${fmt(first, 2)}%` : `${fmt(first, 2)}% / ${fmt(second, 2)}%`;
+}
+
+function recipeRequests(row: FactoryDataRow | null | undefined, proficiencies: ProficiencyItem[]) {
   if (!row) return [] as Array<{ type: 'sell'; symbol: string; amount: number; key: string }>;
+  const input1Amount = adjustedInputAmount(row.input_token_1, row.input_amount_1, proficiencies);
   const requests = [
     { type: 'sell' as const, symbol: row.output_token, amount: row.output_amount, key: sellKey(row.output_token, row.output_amount) },
-    { type: 'sell' as const, symbol: row.input_token_1, amount: row.input_amount_1, key: sellKey(row.input_token_1, row.input_amount_1) },
+    { type: 'sell' as const, symbol: row.input_token_1, amount: input1Amount, key: sellKey(row.input_token_1, input1Amount) },
   ];
   if (row.input_token_2 && row.input_amount_2 > 0) {
-    requests.push({ type: 'sell' as const, symbol: row.input_token_2, amount: row.input_amount_2, key: sellKey(row.input_token_2, row.input_amount_2) });
+    const input2Amount = adjustedInputAmount(row.input_token_2, row.input_amount_2, proficiencies);
+    requests.push({ type: 'sell' as const, symbol: row.input_token_2, amount: input2Amount, key: sellKey(row.input_token_2, input2Amount) });
   }
   return requests;
 }
 
-function recipeProfitPerHour(row: FactoryDataRow, quotes: QuoteMap, workshop: WorkshopItem[]) {
+function recipeProfitPerHour(row: FactoryDataRow, quotes: QuoteMap, workshop: WorkshopItem[], proficiencies: ProficiencyItem[]) {
+  const input1Amount = adjustedInputAmount(row.input_token_1, row.input_amount_1, proficiencies);
+  const input2Amount = row.input_token_2 ? adjustedInputAmount(row.input_token_2, row.input_amount_2, proficiencies) : 0;
   const output = quotes[sellKey(row.output_token, row.output_amount)] || null;
-  const input1 = quotes[sellKey(row.input_token_1, row.input_amount_1)] || null;
-  const input2 = row.input_token_2 ? quotes[sellKey(row.input_token_2, row.input_amount_2)] || null : null;
+  const input1 = quotes[sellKey(row.input_token_1, input1Amount)] || null;
+  const input2 = row.input_token_2 ? quotes[sellKey(row.input_token_2, input2Amount)] || null : null;
   const missing = !output || !input1 || Boolean(row.input_token_2 && !input2);
   if (missing) return { value: 0, missing: true, impact: 0 };
 
@@ -104,11 +121,13 @@ function recipeProfitPerHour(row: FactoryDataRow, quotes: QuoteMap, workshop: Wo
   return { value: profitPerRun * runsPerHour, missing: false, impact };
 }
 
-function craftCostForGap(producerRow: FactoryDataRow | null, gapAmount: number, quotes: QuoteMap) {
+function craftCostForGap(producerRow: FactoryDataRow | null, gapAmount: number, quotes: QuoteMap, proficiencies: ProficiencyItem[]) {
   if (!producerRow || gapAmount <= 0 || producerRow.output_amount <= 0) return { cost: null as number | null, missing: false, impact: 0 };
 
-  const input1 = quotes[sellKey(producerRow.input_token_1, producerRow.input_amount_1)] || null;
-  const input2 = producerRow.input_token_2 ? quotes[sellKey(producerRow.input_token_2, producerRow.input_amount_2)] || null : null;
+  const input1Amount = adjustedInputAmount(producerRow.input_token_1, producerRow.input_amount_1, proficiencies);
+  const input2Amount = producerRow.input_token_2 ? adjustedInputAmount(producerRow.input_token_2, producerRow.input_amount_2, proficiencies) : 0;
+  const input1 = quotes[sellKey(producerRow.input_token_1, input1Amount)] || null;
+  const input2 = producerRow.input_token_2 ? quotes[sellKey(producerRow.input_token_2, input2Amount)] || null : null;
   const missing = !input1 || Boolean(producerRow.input_token_2 && !input2);
   if (missing) return { cost: null, missing: true, impact: 0 };
 
@@ -124,6 +143,7 @@ export default function UpgradeAdvisor() {
   const [ownedFactories, setOwnedFactories] = useState<OwnedFactory[]>([]);
   const [inventory, setInventory] = useState<Record<string, number>>({});
   const [workshop, setWorkshop] = useState<WorkshopItem[]>([]);
+  const [proficiencies, setProficiencies] = useState<ProficiencyItem[]>([]);
   const [quotes, setQuotes] = useState<QuoteMap>({});
   const [loading, setLoading] = useState(true);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -140,6 +160,7 @@ export default function UpgradeAdvisor() {
         setOwnedFactories(homeData.factories || []);
         setInventory(inventoryMap(homeData.inventory || []));
         setWorkshop(homeData.workshop || []);
+        setProficiencies(homeData.proficiencies || []);
       } catch {
         setError('Unable to load upgrade advisor data. Refresh and try again.');
       } finally {
@@ -188,7 +209,7 @@ export default function UpgradeAdvisor() {
     const map = new Map<string, { type: 'sell' | 'buy'; symbol: string; amount: number; key: string }>();
 
     options.forEach((option) => {
-      [...recipeRequests(option.currentRow), ...recipeRequests(option.nextRow)].forEach((request) => map.set(request.key, request));
+      [...recipeRequests(option.currentRow, proficiencies), ...recipeRequests(option.nextRow, proficiencies)].forEach((request) => map.set(request.key, request));
 
       const needToken = option.nextRow.upgrade_token;
       const needAmount = option.nextRow.upgrade_amount;
@@ -197,11 +218,11 @@ export default function UpgradeAdvisor() {
         map.set(buyKey(needToken, gapAmount), { type: 'buy', symbol: needToken, amount: gapAmount, key: buyKey(needToken, gapAmount) });
       }
 
-      recipeRequests(producerRows.get(needToken) || null).forEach((request) => map.set(request.key, request));
+      recipeRequests(producerRows.get(needToken) || null, proficiencies).forEach((request) => map.set(request.key, request));
     });
 
     return Array.from(map.values());
-  }, [inventory, options, producerRows]);
+  }, [inventory, options, producerRows, proficiencies]);
 
   useEffect(() => {
     if (!quoteRequests.length) return;
@@ -241,15 +262,15 @@ export default function UpgradeAdvisor() {
 
   const advisorRows = useMemo<AdvisorRow[]>(() => {
     return options.map((option) => {
-      const current = recipeProfitPerHour(option.currentRow, quotes, workshop);
-      const next = recipeProfitPerHour(option.nextRow, quotes, workshop);
+      const current = recipeProfitPerHour(option.currentRow, quotes, workshop, proficiencies);
+      const next = recipeProfitPerHour(option.nextRow, quotes, workshop, proficiencies);
       const needToken = option.nextRow.upgrade_token;
       const needAmount = option.nextRow.upgrade_amount;
       const ownAmount = inventory[needToken] || 0;
       const gapAmount = Math.max(needAmount - ownAmount, 0);
       const buyQuote = gapAmount > 0 ? quotes[buyKey(needToken, gapAmount)] || null : null;
       const buyCost = gapAmount > 0 ? buyQuote?.input.amount ?? null : 0;
-      const craft = craftCostForGap(producerRows.get(needToken) || null, gapAmount, quotes);
+      const craft = craftCostForGap(producerRows.get(needToken) || null, gapAmount, quotes, proficiencies);
       const costs = [buyCost, craft.cost].filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
       const bestCost = gapAmount === 0 ? 0 : costs.length ? Math.min(...costs) : null;
       const bestChoice = gapAmount === 0 ? 'Ready' : craft.cost !== null && (buyCost === null || craft.cost < buyCost) ? 'Craft' : buyCost !== null ? 'Buy' : 'Waiting';
@@ -272,6 +293,8 @@ export default function UpgradeAdvisor() {
         currentProfitPerHour: current.value,
         nextProfitPerHour: next.value,
         workshopBoostPercent: getWorkshopSpeedBoostPercent(option.symbol, workshop),
+        currentMasteryText: masteryText(option.currentRow, proficiencies),
+        nextMasteryText: masteryText(option.nextRow, proficiencies),
         breakEvenHours,
         impact,
         ready,
@@ -280,7 +303,7 @@ export default function UpgradeAdvisor() {
       if (a.ready !== b.ready) return a.ready ? -1 : 1;
       return a.breakEvenHours - b.breakEvenHours;
     });
-  }, [inventory, options, producerRows, quotes, workshop]);
+  }, [inventory, options, producerRows, quotes, workshop, proficiencies]);
 
   const bestUpgrade = advisorRows.find((row) => row.ready && row.gainPerHour > 0) || null;
 
@@ -298,7 +321,7 @@ export default function UpgradeAdvisor() {
         <Card title="Upgrade Advisor">
           <div className="space-y-3">
             <p className="text-sm text-slate-300">
-              This shows the material needed for the next upgrade, what you already own, what you are missing, and whether buying or crafting the missing amount is cheaper. Workshop speed boosts are included in profit per hour.
+              This shows the material needed for the next upgrade, what you already own, what you are missing, and whether buying or crafting the missing amount is cheaper. Workshop speed boosts and mastery input reductions are included.
             </p>
             {quoteLoading && <p className="text-sm text-slate-400">Loading prices... {quotedCount}/{quoteRequests.length} quotes checked.</p>}
             {error && <p className="text-sm text-red-300">{error}</p>}
@@ -307,6 +330,8 @@ export default function UpgradeAdvisor() {
                 <p className="font-semibold text-emerald-200">Best upgrade candidate</p>
                 <p>{rowLabel(bestUpgrade.option)}</p>
                 <p>Workshop speed boost: {fmt(bestUpgrade.workshopBoostPercent, 2)}%</p>
+                <p>Current recipe mastery reductions: {bestUpgrade.currentMasteryText}</p>
+                <p>Next recipe mastery reductions: {bestUpgrade.nextMasteryText}</p>
                 <p>Need: {fmt(bestUpgrade.needAmount)} {bestUpgrade.needToken}</p>
                 <p>Own: {fmt(bestUpgrade.ownAmount)} {bestUpgrade.needToken}</p>
                 <p>Missing: {fmt(bestUpgrade.gapAmount)} {bestUpgrade.needToken}</p>
@@ -324,12 +349,13 @@ export default function UpgradeAdvisor() {
         <Card title="All Upgrade Candidates">
           {advisorRows.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1320px] text-left text-sm">
+              <table className="w-full min-w-[1420px] text-left text-sm">
                 <thead className="text-slate-300">
                   <tr>
                     <th className="p-2">Rank</th>
                     <th className="p-2">Factory</th>
                     <th className="p-2">Workshop</th>
+                    <th className="p-2">Mastery</th>
                     <th className="p-2">Need</th>
                     <th className="p-2">Own</th>
                     <th className="p-2">Missing</th>
@@ -350,6 +376,7 @@ export default function UpgradeAdvisor() {
                       <td className="p-2">{index + 1}</td>
                       <td className="p-2">{rowLabel(row.option)}</td>
                       <td className="p-2">{fmt(row.workshopBoostPercent, 2)}%</td>
+                      <td className="p-2">{row.currentMasteryText} → {row.nextMasteryText}</td>
                       <td className="p-2">{fmt(row.needAmount)} {row.needToken}</td>
                       <td className="p-2">{fmt(row.ownAmount)} {row.needToken}</td>
                       <td className="p-2">{fmt(row.gapAmount)} {row.needToken}</td>
