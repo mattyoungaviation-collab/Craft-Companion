@@ -1,7 +1,7 @@
 const craftWorldBaseUrl = process.env.CRAFTWORLD_BASE_URL || 'https://craft-world.gg';
 const craftWorldGraphqlUrl = process.env.CRAFTWORLD_GRAPHQL_ENDPOINT || `${craftWorldBaseUrl}/graphql`;
 
-export type CraftworldExactInputQuote = {
+export type CraftworldQuote = {
   type: string;
   input: {
     symbol: string;
@@ -15,6 +15,9 @@ export type CraftworldExactInputQuote = {
     priceImpactPercentage?: number;
   };
 };
+
+export type CraftworldExactInputQuote = CraftworldQuote;
+export type CraftworldExactOutputQuote = CraftworldQuote;
 
 function normalizeCraftworldToken(token?: string) {
   const value = String(token || '').trim();
@@ -61,7 +64,7 @@ export async function getCraftworldExactInputQuote(input: {
   const inputAmount = Number(input.inputAmount || 0);
 
   if (!inputSymbol) throw new Error('Input symbol is required.');
-  if (!Number.isFinite(inputAmount) || inputAmount <= 0) throw new Error('Input amount must be greater than zero.');
+  if (inputAmount <= 0 || !Number.isFinite(inputAmount)) throw new Error('Input amount must be greater than zero.');
 
   if (inputSymbol === outputSymbol) {
     return {
@@ -108,4 +111,63 @@ export async function getCraftworldExactInputQuote(input: {
 
   if (!data.exactInputQuote) throw new Error('Craft World quote was not returned.');
   return data.exactInputQuote;
+}
+
+export async function getCraftworldExactOutputQuote(input: {
+  inputSymbol?: string;
+  outputSymbol: string;
+  outputAmount: number;
+}, token?: string): Promise<CraftworldExactOutputQuote> {
+  const inputSymbol = String(input.inputSymbol || 'COIN').trim().toUpperCase();
+  const outputSymbol = String(input.outputSymbol || '').trim().toUpperCase();
+  const outputAmount = Number(input.outputAmount || 0);
+
+  if (!outputSymbol) throw new Error('Output symbol is required.');
+  if (outputAmount <= 0 || !Number.isFinite(outputAmount)) throw new Error('Output amount must be greater than zero.');
+
+  if (inputSymbol === outputSymbol) {
+    return {
+      type: 'EXACT_OUTPUT',
+      input: { symbol: inputSymbol, amount: outputAmount },
+      output: { symbol: outputSymbol, amount: outputAmount },
+      details: { priceImpactPercentage: 0 },
+    };
+  }
+
+  const query = `
+    query exactOutputQuoteQuery($input: ExactOutputInput!) {
+      exactOutputQuote(input: $input) {
+        type
+        input {
+          symbol
+          amount
+        }
+        output {
+          symbol
+          amount
+        }
+        details {
+          priceImpactPercentage
+        }
+      }
+    }
+  `;
+
+  const data = await fetch(craftWorldGraphqlUrl, {
+    method: 'POST',
+    headers: craftWorldHeaders(token),
+    body: JSON.stringify({
+      query,
+      variables: {
+        input: {
+          inputSymbol,
+          outputSymbol,
+          outputAmount,
+        },
+      },
+    }),
+  }).then((res) => readJson<{ exactOutputQuote?: CraftworldExactOutputQuote }>(res));
+
+  if (!data.exactOutputQuote) throw new Error('Craft World buy quote was not returned.');
+  return data.exactOutputQuote;
 }
