@@ -3,7 +3,7 @@ import Card from '../components/Card';
 import Layout from '../components/Layout';
 import { getCraftworldBuyQuote, getCraftworldHome, getCraftworldQuote } from '../services/api';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
-import { applyMasteryInputReduction, getMasteryInputReductionPercent, type ProficiencyItem } from '../services/masteryModifiers';
+import { applyMasteryInputReduction, getMasteryInputReductionPercent, getMasteryLevel, type ProficiencyItem } from '../services/masteryModifiers';
 import { getRunsPerHourWithWorkshop, getWorkshopSpeedBoostPercent, type WorkshopItem } from '../services/workshopModifiers';
 
 type OwnedFactory = {
@@ -52,8 +52,8 @@ type ProfitAdvisorRow = {
   profitPerHour: number;
   runsPerHour: number;
   workshopBoostPercent: number;
-  input1ReductionPercent: number;
-  input2ReductionPercent: number;
+  masteryLevel: number;
+  masteryReductionPercent: number;
   missingQuote: boolean;
   maxImpact: number;
 };
@@ -77,19 +77,19 @@ function buyQuoteKey(symbol: string, amount: number) {
   return `BUY-COIN-${symbol.toUpperCase()}-${amount}`;
 }
 
-function getAdjustedInputAmount(symbol: string, amount: number, proficiencies: ProficiencyItem[]) {
-  return applyMasteryInputReduction(amount, symbol, proficiencies);
+function getAdjustedInputAmount(factoryToken: string, amount: number, proficiencies: ProficiencyItem[]) {
+  return Math.ceil(applyMasteryInputReduction(amount, factoryToken, proficiencies));
 }
 
 function getRecipeQuoteRequests(row: FactoryDataRow, proficiencies: ProficiencyItem[]) {
-  const input1Amount = getAdjustedInputAmount(row.input_token_1, row.input_amount_1, proficiencies);
+  const input1Amount = getAdjustedInputAmount(row.token, row.input_amount_1, proficiencies);
   const requests: QuoteRequest[] = [
     { type: 'sell', symbol: row.output_token, amount: row.output_amount, key: sellQuoteKey(row.output_token, row.output_amount) },
     { type: 'sell', symbol: row.input_token_1, amount: input1Amount, key: sellQuoteKey(row.input_token_1, input1Amount) },
   ];
 
   if (row.input_token_2 && row.input_amount_2 > 0) {
-    const input2Amount = getAdjustedInputAmount(row.input_token_2, row.input_amount_2, proficiencies);
+    const input2Amount = getAdjustedInputAmount(row.token, row.input_amount_2, proficiencies);
     requests.push({ type: 'sell', symbol: row.input_token_2, amount: input2Amount, key: sellQuoteKey(row.input_token_2, input2Amount) });
   }
 
@@ -282,8 +282,8 @@ export default function Profitability() {
       .filter((option): option is OwnedFactoryOption & { matchingCsvRow: FactoryDataRow } => Boolean(option.matchingCsvRow))
       .map((option) => {
         const row = option.matchingCsvRow;
-        const input1AdjustedAmount = getAdjustedInputAmount(row.input_token_1, row.input_amount_1, proficiencies);
-        const input2AdjustedAmount = row.input_token_2 ? getAdjustedInputAmount(row.input_token_2, row.input_amount_2, proficiencies) : 0;
+        const input1AdjustedAmount = getAdjustedInputAmount(row.token, row.input_amount_1, proficiencies);
+        const input2AdjustedAmount = row.input_token_2 ? getAdjustedInputAmount(row.token, row.input_amount_2, proficiencies) : 0;
         const outputQuote = getSellQuote(row.output_token, row.output_amount);
         const input1Quote = getSellQuote(row.input_token_1, input1AdjustedAmount);
         const input2Quote = row.input_token_2 ? getSellQuote(row.input_token_2, input2AdjustedAmount) : null;
@@ -305,8 +305,8 @@ export default function Profitability() {
           profitPerHour,
           runsPerHour,
           workshopBoostPercent: getWorkshopSpeedBoostPercent(row.token, workshop),
-          input1ReductionPercent: getMasteryInputReductionPercent(row.input_token_1, proficiencies),
-          input2ReductionPercent: row.input_token_2 ? getMasteryInputReductionPercent(row.input_token_2, proficiencies) : 0,
+          masteryLevel: getMasteryLevel(row.token, proficiencies),
+          masteryReductionPercent: getMasteryInputReductionPercent(row.token, proficiencies),
           missingQuote: !outputQuote || !input1Quote || Boolean(row.input_token_2 && !input2Quote),
           maxImpact: impacts.length ? Math.max(...impacts) : 0,
         };
@@ -318,15 +318,15 @@ export default function Profitability() {
   const missingCsvMatches = ownedFactoryOptions.filter((option) => !option.matchingCsvRow).length;
   const readyAdvisorRows = advisorRows.filter((row) => !row.missingQuote);
 
-  const selectedInput1AdjustedAmount = selectedRow ? getAdjustedInputAmount(selectedRow.input_token_1, selectedRow.input_amount_1, proficiencies) : 0;
-  const selectedInput2AdjustedAmount = selectedRow?.input_token_2 ? getAdjustedInputAmount(selectedRow.input_token_2, selectedRow.input_amount_2, proficiencies) : 0;
+  const selectedInput1AdjustedAmount = selectedRow ? getAdjustedInputAmount(selectedRow.token, selectedRow.input_amount_1, proficiencies) : 0;
+  const selectedInput2AdjustedAmount = selectedRow?.input_token_2 ? getAdjustedInputAmount(selectedRow.token, selectedRow.input_amount_2, proficiencies) : 0;
   const outputQuote = selectedRow ? getSellQuote(selectedRow.output_token, selectedRow.output_amount) : null;
   const input1Quote = selectedRow ? getSellQuote(selectedRow.input_token_1, selectedInput1AdjustedAmount) : null;
   const input2Quote = selectedRow?.input_token_2 ? getSellQuote(selectedRow.input_token_2, selectedInput2AdjustedAmount) : null;
   const upgradeQuote = selectedUpgradeRow?.upgrade_token ? getBuyQuote(selectedUpgradeRow.upgrade_token, selectedUpgradeRow.upgrade_amount) : null;
   const selectedWorkshopBoostPercent = selectedRow ? getWorkshopSpeedBoostPercent(selectedRow.token, workshop) : 0;
-  const selectedInput1ReductionPercent = selectedRow ? getMasteryInputReductionPercent(selectedRow.input_token_1, proficiencies) : 0;
-  const selectedInput2ReductionPercent = selectedRow?.input_token_2 ? getMasteryInputReductionPercent(selectedRow.input_token_2, proficiencies) : 0;
+  const selectedMasteryLevel = selectedRow ? getMasteryLevel(selectedRow.token, proficiencies) : 0;
+  const selectedMasteryReductionPercent = selectedRow ? getMasteryInputReductionPercent(selectedRow.token, proficiencies) : 0;
 
   const inputCost = (input1Quote?.output.amount || 0) + (input2Quote?.output.amount || 0);
   const outputValue = outputQuote?.output.amount || 0;
@@ -349,7 +349,7 @@ export default function Profitability() {
         <Card title="Profit Advisor">
           <div className="space-y-3">
             <p className="text-sm text-slate-300">
-              This ranks every owned factory that matches the CSV by estimated COIN profit per hour using live Craft World quotes, workshop speed boosts, and mastery input reductions.
+              This ranks every owned factory that matches the CSV by estimated COIN profit per hour using live Craft World quotes, workshop speed boosts, and factory resource mastery input reductions.
             </p>
             {quoteLoading && (
               <p className="text-sm text-slate-400">
@@ -366,7 +366,7 @@ export default function Profitability() {
                 <p className="font-semibold text-emerald-200">Best visible craft right now</p>
                 <p>{formatFactoryLabel(bestAdvisorRow.option)}</p>
                 <p>Workshop speed boost: {formatNumber(bestAdvisorRow.workshopBoostPercent, 2)}%</p>
-                <p>Input mastery reductions: {formatNumber(bestAdvisorRow.input1ReductionPercent, 2)}%{bestAdvisorRow.row.input_token_2 ? ` / ${formatNumber(bestAdvisorRow.input2ReductionPercent, 2)}%` : ''}</p>
+                <p>Mastery: Lv {bestAdvisorRow.masteryLevel} / {formatNumber(bestAdvisorRow.masteryReductionPercent, 2)}% {bestAdvisorRow.row.token}</p>
                 <p>Estimated profit per hour: {formatNumber(bestAdvisorRow.profitPerHour)} COIN</p>
                 <p>Estimated profit per run: {formatNumber(bestAdvisorRow.profitPerRun)} COIN</p>
               </div>
@@ -400,7 +400,7 @@ export default function Profitability() {
                       <td className="p-2">{index + 1}</td>
                       <td className="p-2">{formatFactoryLabel(advisorRow.option)}</td>
                       <td className="p-2">{formatNumber(advisorRow.workshopBoostPercent, 2)}%</td>
-                      <td className="p-2">{formatNumber(advisorRow.input1ReductionPercent, 2)}%{advisorRow.row.input_token_2 ? ` / ${formatNumber(advisorRow.input2ReductionPercent, 2)}%` : ''}</td>
+                      <td className="p-2">Lv {advisorRow.masteryLevel} / {formatNumber(advisorRow.masteryReductionPercent, 2)}% {advisorRow.row.token}</td>
                       <td className={advisorRow.profitPerHour >= 0 ? 'p-2 text-emerald-300' : 'p-2 text-red-300'}>
                         {advisorRow.missingQuote ? 'Waiting' : `${formatNumber(advisorRow.profitPerHour)} COIN`}
                       </td>
@@ -425,7 +425,7 @@ export default function Profitability() {
               Select one of your live Craft World factories. The calculator matches your owned factory level to the uploaded factory CSV.
             </p>
             <p className="text-sm text-yellow-200">
-              Output value uses the sell quote: output token to COIN. Input costs use mastery reduced input amounts, then quote those reduced inputs to COIN.
+              Output value uses the sell quote: output token to COIN. Input costs use the selected factory resource mastery to reduce each input amount, then quote those reduced inputs to COIN.
             </p>
             <p className="text-sm text-yellow-200">
               Upgrade requirement uses the next CSV level row. Profit per hour includes your workshop speed boost for the factory resource.
@@ -475,9 +475,10 @@ export default function Profitability() {
                 <p>CSV Level: {selectedRow.level}</p>
                 <p>Original Duration: {formatNumber(selectedRow.duration_min, 2)} min</p>
                 <p>Workshop Speed Boost: {formatNumber(selectedWorkshopBoostPercent, 2)}%</p>
+                <p>Mastery: Lv {selectedMasteryLevel} / {formatNumber(selectedMasteryReductionPercent, 2)}% {selectedRow.token}</p>
                 <p>Output: {formatNumber(selectedRow.output_amount)} {selectedRow.output_token}</p>
-                <p>Input 1: {formatNumber(selectedRow.input_amount_1)} → {formatNumber(selectedInput1AdjustedAmount)} {selectedRow.input_token_1} ({formatNumber(selectedInput1ReductionPercent, 2)}% mastery)</p>
-                <p>Input 2: {selectedRow.input_token_2 ? `${formatNumber(selectedRow.input_amount_2)} → ${formatNumber(selectedInput2AdjustedAmount)} ${selectedRow.input_token_2} (${formatNumber(selectedInput2ReductionPercent, 2)}% mastery)` : 'N/A'}</p>
+                <p>Input 1: {formatNumber(selectedRow.input_amount_1)} → {formatNumber(selectedInput1AdjustedAmount)} {selectedRow.input_token_1}</p>
+                <p>Input 2: {selectedRow.input_token_2 ? `${formatNumber(selectedRow.input_amount_2)} → ${formatNumber(selectedInput2AdjustedAmount)} ${selectedRow.input_token_2}` : 'N/A'}</p>
                 <p>Upgrade Requires: {selectedUpgradeRow?.upgrade_token ? `${formatNumber(selectedUpgradeRow.upgrade_amount)} ${selectedUpgradeRow.upgrade_token}` : 'No next CSV row'}</p>
               </div>
             </Card>
