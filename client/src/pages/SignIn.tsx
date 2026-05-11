@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import EthereumProvider from '@walletconnect/ethereum-provider';
 import {
   craftWorldWalletLogin,
   getCraftworldAuthPayload,
@@ -19,8 +20,42 @@ declare global {
   }
 }
 
-function getWalletProvider() {
+type WalletProvider = {
+  request: (args: { method: string; params?: unknown[] }) => Promise<any>;
+  disconnect?: () => Promise<void>;
+};
+
+const RONIN_CHAIN_ID = 2020;
+const RONIN_RPC_URL = 'https://api.roninchain.com/rpc';
+
+function getInjectedWalletProvider() {
   return window.ronin?.provider || window.ethereum;
+}
+
+async function getWalletConnectProvider() {
+  const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
+  if (!projectId) {
+    throw new Error('WalletConnect is not configured. Add VITE_WALLETCONNECT_PROJECT_ID to your environment.');
+  }
+
+  const provider = await EthereumProvider.init({
+    projectId,
+    chains: [RONIN_CHAIN_ID],
+    optionalChains: [RONIN_CHAIN_ID],
+    rpcMap: {
+      [RONIN_CHAIN_ID]: RONIN_RPC_URL,
+    },
+    showQrModal: true,
+    metadata: {
+      name: 'Craftworld Companion',
+      description: 'Craftworld Companion wallet sign in',
+      url: window.location.origin,
+      icons: [`${window.location.origin}/favicon.ico`],
+    },
+  });
+
+  await provider.connect();
+  return provider as WalletProvider;
 }
 
 export default function SignIn() {
@@ -30,40 +65,58 @@ export default function SignIn() {
   const [e, setE] = useState('');
   const [walletStatus, setWalletStatus] = useState('');
 
-  const signInWithWallet = async () => {
+  const completeCraftWorldWalletLogin = async (provider: WalletProvider, label: string) => {
+    setE('');
+    setWalletStatus(`Requesting ${label} connection...`);
+    const accounts = await provider.request({ method: 'eth_requestAccounts' });
+    const address = accounts?.[0];
+    if (!address) throw new Error('No wallet address was returned.');
+
+    setWalletStatus('Preparing Craft World login payload...');
+    const craftWorldPayload = await getCraftworldAuthPayload({ address });
+
+    setWalletStatus('Please sign the Craft World nonce.');
+    const craftWorldSignature = await provider.request({
+      method: 'personal_sign',
+      params: [craftWorldPayload.payload.nonce, address],
+    });
+
+    setWalletStatus('Connecting Craft World account...');
+    await craftWorldWalletLogin({
+      payload: craftWorldPayload.payload,
+      signature: craftWorldSignature,
+    });
+
+    nav('/home');
+  };
+
+  const signInWithRoninWallet = async () => {
     setE('');
     setWalletStatus('');
-    const provider = getWalletProvider();
+    const provider = getInjectedWalletProvider();
     if (!provider) {
       setE('Ronin Wallet was not detected. Install Ronin Wallet or open this app in a wallet enabled browser.');
       return;
     }
 
     try {
-      setWalletStatus('Requesting wallet connection...');
-      const accounts = await provider.request({ method: 'eth_requestAccounts' });
-      const address = accounts?.[0];
-      if (!address) throw new Error('No wallet address was returned.');
-
-      setWalletStatus('Preparing Craft World login payload...');
-      const craftWorldPayload = await getCraftworldAuthPayload({ address });
-
-      setWalletStatus('Please sign the Craft World nonce.');
-      const craftWorldSignature = await provider.request({
-        method: 'personal_sign',
-        params: [craftWorldPayload.payload.nonce, address],
-      });
-
-      setWalletStatus('Connecting Craft World account...');
-      await craftWorldWalletLogin({
-        payload: craftWorldPayload.payload,
-        signature: craftWorldSignature,
-      });
-
-      nav('/home');
+      await completeCraftWorldWalletLogin(provider, 'Ronin Wallet');
     } catch (err: any) {
       setWalletStatus('');
-      setE(err.message || 'Wallet sign in failed.');
+      setE(err.message || 'Ronin Wallet sign in failed.');
+    }
+  };
+
+  const signInWithWalletConnect = async () => {
+    setE('');
+    setWalletStatus('');
+
+    try {
+      const provider = await getWalletConnectProvider();
+      await completeCraftWorldWalletLogin(provider, 'WalletConnect');
+    } catch (err: any) {
+      setWalletStatus('');
+      setE(err.message || 'WalletConnect sign in failed.');
     }
   };
 
@@ -71,9 +124,14 @@ export default function SignIn() {
     <div className="mx-auto mt-12 max-w-md space-y-6">
       <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
         <h1 className="mb-3 text-xl font-semibold">Sign In</h1>
-        <button type="button" onClick={signInWithWallet} className="w-full rounded bg-blue-600 p-2 font-semibold">
-          Connect Ronin Wallet
-        </button>
+        <div className="space-y-3">
+          <button type="button" onClick={signInWithRoninWallet} className="w-full rounded bg-blue-600 p-2 font-semibold">
+            Connect Ronin Wallet
+          </button>
+          <button type="button" onClick={signInWithWalletConnect} className="w-full rounded bg-slate-700 p-2 font-semibold">
+            Connect with WalletConnect
+          </button>
+        </div>
         {walletStatus && <p className="mt-2 text-sm text-slate-300">{walletStatus}</p>}
       </div>
 
