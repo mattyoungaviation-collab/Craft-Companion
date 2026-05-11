@@ -15,6 +15,18 @@ import {
 
 export const craftworldRouter = Router();
 
+function markConnection(data: any, source: 'live' | 'mock' | 'public_profile_fallback', message: string) {
+  return {
+    ...data,
+    connection: {
+      isLive: source === 'live',
+      source,
+      message,
+      checkedAt: new Date().toISOString(),
+    },
+  };
+}
+
 function getPrimaryWalletAddress(account: any, fallbackAddress = '') {
   const wallets = Array.isArray(account?.wallets) ? account.wallets : [];
 
@@ -57,9 +69,11 @@ async function getCurrentUserAndFreshToken(req: any) {
   return { user, token: tokens[0] || '' };
 }
 
-async function getPublicProfileHomeFallback(uid: string) {
+async function getPublicProfileHomeFallback(uid: string, reason = 'Protected Craft World account data was unavailable.') {
   const home = getMockCraftworldHomeData();
-  if (!uid) return home;
+  if (!uid) {
+    return markConnection(home, 'mock', `${reason} No Craft World UID was available, so development mock data was returned.`);
+  }
 
   try {
     const profile = await getCraftworldProfileByUid(uid);
@@ -70,11 +84,11 @@ async function getPublicProfileHomeFallback(uid: string) {
       walletAddress: profile.walletAddress,
     };
     home.account.walletAddress = profile.walletAddress;
+    return markConnection(home, 'public_profile_fallback', `${reason} Only public profile details were loaded.`);
   } catch {
     home.profile = { uid };
+    return markConnection(home, 'mock', `${reason} Public profile lookup also failed, so development mock data was returned.`);
   }
-
-  return home;
 }
 
 craftworldRouter.get('/home', async (req: any, res) => {
@@ -89,7 +103,7 @@ craftworldRouter.get('/home', async (req: any, res) => {
     res.json(data);
   } catch (error: any) {
     console.error('Protected Craft World home failed, returning public profile fallback', error.message);
-    const fallback = await getPublicProfileHomeFallback(uid || '');
+    const fallback = await getPublicProfileHomeFallback(uid || '', error.message || 'Protected Craft World account data was unavailable.');
     res.json(fallback);
   }
 });
