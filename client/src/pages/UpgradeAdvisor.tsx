@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Card from '../components/Card';
 import Layout from '../components/Layout';
-import { getCraftworldHome, getCraftworldQuote } from '../services/api';
+import { getCraftworldBuyQuote, getCraftworldHome, getCraftworldQuote } from '../services/api';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
 
 type OwnedFactory = {
@@ -35,6 +35,8 @@ type UpgradeAdvisorRow = {
   currentProfitPerHour: number;
   nextProfitPerHour: number;
   profitGainPerHour: number;
+  upgradeToken: string;
+  upgradeAmount: number;
   upgradeCost: number;
   breakEvenHours: number;
   missingQuote: boolean;
@@ -44,7 +46,11 @@ type UpgradeAdvisorRow = {
 const QUOTE_BATCH_SIZE = 12;
 
 function quoteKey(symbol: string, amount: number) {
-  return `${symbol.toUpperCase()}-${amount}`;
+  return `SELL-${symbol.toUpperCase()}-${amount}`;
+}
+
+function buyQuoteKey(symbol: string, amount: number) {
+  return `BUY-COIN-${symbol.toUpperCase()}-${amount}`;
 }
 
 function formatNumber(value: number, digits = 6) {
@@ -63,22 +69,28 @@ function formatFactoryLabel(option: OwnedFactoryOption) {
 }
 
 function getRecipeQuoteRequests(row: FactoryDataRow | null) {
-  if (!row) return [] as Array<{ symbol: string; amount: number; key: string }>;
+  if (!row) return [] as Array<{ type: 'sell'; symbol: string; amount: number; key: string }>;
 
   const requests = [
-    { symbol: row.output_token, amount: row.output_amount, key: quoteKey(row.output_token, row.output_amount) },
-    { symbol: row.input_token_1, amount: row.input_amount_1, key: quoteKey(row.input_token_1, row.input_amount_1) },
+    { type: 'sell' as const, symbol: row.output_token, amount: row.output_amount, key: quoteKey(row.output_token, row.output_amount) },
+    { type: 'sell' as const, symbol: row.input_token_1, amount: row.input_amount_1, key: quoteKey(row.input_token_1, row.input_amount_1) },
   ];
 
   if (row.input_token_2 && row.input_amount_2 > 0) {
-    requests.push({ symbol: row.input_token_2, amount: row.input_amount_2, key: quoteKey(row.input_token_2, row.input_amount_2) });
-  }
-
-  if (row.upgrade_token && row.upgrade_amount > 0) {
-    requests.push({ symbol: row.upgrade_token, amount: row.upgrade_amount, key: quoteKey(row.upgrade_token, row.upgrade_amount) });
+    requests.push({ type: 'sell' as const, symbol: row.input_token_2, amount: row.input_amount_2, key: quoteKey(row.input_token_2, row.input_amount_2) });
   }
 
   return requests;
+}
+
+function getUpgradeBuyQuoteRequest(row: FactoryDataRow | null) {
+  if (!row?.upgrade_token || row.upgrade_amount <= 0) return null;
+  return {
+    type: 'buy' as const,
+    symbol: row.upgrade_token,
+    amount: row.upgrade_amount,
+    key: buyQuoteKey(row.upgrade_token, row.upgrade_amount),
+  };
 }
 
 function getRecipeProfitPerHour(row: FactoryDataRow | null, quotes: QuoteMap) {
@@ -162,12 +174,15 @@ export default function UpgradeAdvisor() {
   }, [ownedFactories, rows]);
 
   const quoteRequests = useMemo(() => {
-    const byKey = new Map<string, { symbol: string; amount: number; key: string }>();
+    const byKey = new Map<string, { type: 'sell' | 'buy'; symbol: string; amount: number; key: string }>();
 
     factoryOptions.forEach((option) => {
       [...getRecipeQuoteRequests(option.currentRow), ...getRecipeQuoteRequests(option.nextRow)].forEach((request) => {
         if (!byKey.has(request.key)) byKey.set(request.key, request);
       });
+
+      const upgradeRequest = getUpgradeBuyQuoteRequest(option.currentRow);
+      if (upgradeRequest && !byKey.has(upgradeRequest.key)) byKey.set(upgradeRequest.key, upgradeRequest);
     });
 
     return Array.from(byKey.values());
@@ -190,11 +205,17 @@ export default function UpgradeAdvisor() {
           const entries = await Promise.all(
             batch.map(async (request) => {
               try {
-                const quote = await getCraftworldQuote({
-                  inputSymbol: request.symbol,
-                  outputSymbol: 'COIN',
-                  inputAmount: request.amount,
-                });
+                const quote = request.type === 'buy'
+                  ? await getCraftworldBuyQuote({
+                      inputSymbol: 'COIN',
+                      outputSymbol: request.symbol,
+                      outputAmount: request.amount,
+                    })
+                  : await getCraftworldQuote({
+                      inputSymbol: request.symbol,
+                      outputSymbol: 'COIN',
+                      inputAmount: request.amount,
+                    });
                 return [request.key, quote] as const;
               } catch {
                 return [request.key, null] as const;
@@ -224,10 +245,10 @@ export default function UpgradeAdvisor() {
       .map((option) => {
         const current = getRecipeProfitPerHour(option.currentRow, quotes);
         const next = getRecipeProfitPerHour(option.nextRow, quotes);
-        const upgradeQuote = option.currentRow?.upgrade_token
-          ? quotes[quoteKey(option.currentRow.upgrade_token, option.currentRow.upgrade_amount)] || null
-          : null;
-        const upgradeCost = upgradeQuote?.output.amount || 0;
+        const upgradeToken = option.currentRow?.upgrade_token || '';
+        const upgradeAmount = option.currentRow?.upgrade_amount || 0;
+        const upgradeQuote = upgradeToken ? quotes[buyQuoteKey(upgradeToken, upgradeAmount)] || null : null;
+        const upgradeCost = upgradeQuote?.input.amount || 0;
         const profitGainPerHour = next.profitPerHour - current.profitPerHour;
         const breakEvenHours = profitGainPerHour > 0 ? upgradeCost / profitGainPerHour : Number.POSITIVE_INFINITY;
         const upgradeImpact = upgradeQuote?.details?.priceImpactPercentage || 0;
@@ -237,6 +258,8 @@ export default function UpgradeAdvisor() {
           currentProfitPerHour: current.profitPerHour,
           nextProfitPerHour: next.profitPerHour,
           profitGainPerHour,
+          upgradeToken,
+          upgradeAmount,
           upgradeCost,
           breakEvenHours,
           missingQuote: current.missingQuote || next.missingQuote || !upgradeQuote,
@@ -267,7 +290,7 @@ export default function UpgradeAdvisor() {
         <Card title="Upgrade Advisor">
           <div className="space-y-3">
             <p className="text-sm text-slate-300">
-              This compares your current factory level against the next level, estimates the added COIN profit per hour, then calculates upgrade break even time.
+              This compares your current factory level against the next level, estimates the added COIN profit per hour, then calculates upgrade break even time using a buy quote for the exact upgrade resource amount.
             </p>
             {quoteLoading && (
               <p className="text-sm text-slate-400">
@@ -285,7 +308,8 @@ export default function UpgradeAdvisor() {
               <div className="rounded-lg border border-emerald-400/70 bg-emerald-500/10 p-3 text-sm">
                 <p className="font-semibold text-emerald-200">Best upgrade candidate</p>
                 <p>{formatFactoryLabel(bestUpgrade.option)}</p>
-                <p>Upgrade cost: {formatNumber(bestUpgrade.upgradeCost)} COIN</p>
+                <p>Requires: {formatNumber(bestUpgrade.upgradeAmount)} {bestUpgrade.upgradeToken}</p>
+                <p>Buy cost: {formatNumber(bestUpgrade.upgradeCost)} COIN</p>
                 <p>Added profit per hour: {formatNumber(bestUpgrade.profitGainPerHour)} COIN</p>
                 <p>Break even: {formatHours(bestUpgrade.breakEvenHours)}</p>
               </div>
@@ -298,15 +322,16 @@ export default function UpgradeAdvisor() {
         <Card title="All Upgrade Candidates">
           {advisorRows.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-left text-sm">
+              <table className="w-full min-w-[980px] text-left text-sm">
                 <thead className="text-slate-300">
                   <tr>
                     <th className="p-2">Rank</th>
                     <th className="p-2">Factory</th>
+                    <th className="p-2">Upgrade Requires</th>
+                    <th className="p-2">Buy Cost</th>
                     <th className="p-2">Current Profit/Hr</th>
                     <th className="p-2">Next Profit/Hr</th>
                     <th className="p-2">Gain/Hr</th>
-                    <th className="p-2">Upgrade Cost</th>
                     <th className="p-2">Break Even</th>
                     <th className="p-2">Impact</th>
                     <th className="p-2">Status</th>
@@ -317,12 +342,13 @@ export default function UpgradeAdvisor() {
                     <tr key={row.option.key} className="border-t border-slate-800">
                       <td className="p-2">{index + 1}</td>
                       <td className="p-2">{formatFactoryLabel(row.option)}</td>
+                      <td className="p-2">{row.upgradeToken ? `${formatNumber(row.upgradeAmount)} ${row.upgradeToken}` : 'N/A'}</td>
+                      <td className="p-2">{row.missingQuote ? 'Waiting' : `${formatNumber(row.upgradeCost)} COIN`}</td>
                       <td className="p-2">{row.missingQuote ? 'Waiting' : `${formatNumber(row.currentProfitPerHour)} COIN`}</td>
                       <td className="p-2">{row.missingQuote ? 'Waiting' : `${formatNumber(row.nextProfitPerHour)} COIN`}</td>
                       <td className={row.profitGainPerHour >= 0 ? 'p-2 text-emerald-300' : 'p-2 text-red-300'}>
                         {row.missingQuote ? 'Waiting' : `${formatNumber(row.profitGainPerHour)} COIN`}
                       </td>
-                      <td className="p-2">{row.missingQuote ? 'Waiting' : `${formatNumber(row.upgradeCost)} COIN`}</td>
                       <td className="p-2">{row.missingQuote ? 'Waiting' : formatHours(row.breakEvenHours)}</td>
                       <td className="p-2">{row.missingQuote ? 'Waiting' : `${formatNumber(row.maxImpact, 2)}%`}</td>
                       <td className="p-2">{row.missingQuote ? 'Waiting for quotes' : row.profitGainPerHour > 0 ? 'Candidate' : 'Not worth it yet'}</td>
