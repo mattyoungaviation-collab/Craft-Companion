@@ -4,7 +4,7 @@ import { getMatrixCache, saveMatrixCache } from '../storage/matrixCacheStorage.j
 import { getCraftworldHomeData } from '../services/craftworldGraphql.js';
 import { getCraftworldProfileByUid, getCraftworldWallets } from '../services/craftworldIdentity.js';
 import { getMockCraftworldHomeData } from '../services/mockCraftworldData.js';
-import { getCraftworldExactInputQuote } from '../services/craftworldQuote.js';
+import { getCraftworldExactInputQuote, getCraftworldExactOutputQuote } from '../services/craftworldQuote.js';
 import {
   exchangeCraftworldCustomToken,
   getCraftworldAccountIdentity,
@@ -133,6 +133,25 @@ craftworldRouter.post('/quote', async (req: any, res) => {
     res.json(quote);
   } catch (error: any) {
     res.status(502).json({ message: error.message || 'Unable to load Craft World quote.' });
+  }
+});
+
+craftworldRouter.post('/buy-quote', async (req: any, res) => {
+  const { inputSymbol = 'COIN', outputSymbol, outputAmount } = req.body ?? {};
+
+  try {
+    const { token } = await getCurrentUserAndFreshToken(req);
+    const quote = await getCraftworldExactOutputQuote(
+      {
+        inputSymbol: String(inputSymbol || 'COIN'),
+        outputSymbol: String(outputSymbol || ''),
+        outputAmount: Number(outputAmount || 0),
+      },
+      token,
+    );
+    res.json(quote);
+  } catch (error: any) {
+    res.status(502).json({ message: error.message || 'Unable to load Craft World buy quote.' });
   }
 });
 
