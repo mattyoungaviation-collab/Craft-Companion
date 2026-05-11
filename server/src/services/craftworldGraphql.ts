@@ -10,6 +10,22 @@ type CraftworldGraphqlAttempt = {
   label: string;
 };
 
+function withConnectionStatus(
+  data: CraftworldHomeData,
+  source: 'live' | 'mock' | 'public_profile_fallback',
+  message: string,
+): CraftworldHomeData {
+  return {
+    ...data,
+    connection: {
+      isLive: source === 'live',
+      source,
+      message,
+      checkedAt: new Date().toISOString(),
+    },
+  };
+}
+
 function normalizeCraftworldToken(token?: string) {
   const value = String(token || '').trim();
   if (!value) return '';
@@ -68,14 +84,26 @@ export async function getCraftworldHomeData(_craftWorldUserId: string, authToken
   const tokens = (Array.isArray(authTokens) ? authTokens : [authTokens || fallbackToken]).filter(Boolean) as string[];
   const endpoint = process.env.CRAFTWORLD_GRAPHQL_ENDPOINT || 'https://craft-world.gg/graphql';
 
-  if (!tokens.length) return getMockCraftworldHomeData();
+  if (!tokens.length) {
+    return withConnectionStatus(
+      getMockCraftworldHomeData(),
+      'mock',
+      'No Craft World auth token was available, so development mock data was returned.',
+    );
+  }
 
   const attempts: CraftworldGraphqlAttempt[] = [];
 
   for (const [tokenIndex, token] of tokens.entries()) {
     const attempt = await requestHomeData(endpoint, token, `token-${tokenIndex + 1}:authorization-bearer-jwt`);
     attempts.push(attempt);
-    if (attempt.res.ok && !attempt.raw.errors) return normalizeCraftworldHomeData(attempt.raw);
+    if (attempt.res.ok && !attempt.raw.errors) {
+      return withConnectionStatus(
+        normalizeCraftworldHomeData(attempt.raw),
+        'live',
+        'Live Craft World account data loaded successfully.',
+      );
+    }
   }
 
   console.error('Craft World GraphQL home failed', attempts.map(summarizeAttempt));
