@@ -3,7 +3,7 @@ import Card from '../components/Card';
 import Layout from '../components/Layout';
 import { getCraftworldBuyQuote, getCraftworldHome, getCraftworldQuote } from '../services/api';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
-import { applyMasteryInputReduction, getMasteryInputReductionPercent, type ProficiencyItem } from '../services/masteryModifiers';
+import { applyMasteryInputReduction, getMasteryInputReductionPercent, getMasteryLevel, type ProficiencyItem } from '../services/masteryModifiers';
 import { getRunsPerHourWithWorkshop, getWorkshopSpeedBoostPercent, type WorkshopItem } from '../services/workshopModifiers';
 
 type OwnedFactory = { id?: string; areaSymbol?: string; level?: number; landPlotName?: string };
@@ -76,33 +76,33 @@ function inventoryMap(items: ResourceAmount[]) {
   }, {});
 }
 
-function adjustedInputAmount(symbol: string, amount: number, proficiencies: ProficiencyItem[]) {
-  return applyMasteryInputReduction(amount, symbol, proficiencies);
+function adjustedInputAmount(factoryToken: string, amount: number, proficiencies: ProficiencyItem[]) {
+  return applyMasteryInputReduction(amount, factoryToken, proficiencies);
 }
 
 function masteryText(row: FactoryDataRow, proficiencies: ProficiencyItem[]) {
-  const first = getMasteryInputReductionPercent(row.input_token_1, proficiencies);
-  const second = row.input_token_2 ? getMasteryInputReductionPercent(row.input_token_2, proficiencies) : null;
-  return second === null ? `${fmt(first, 2)}%` : `${fmt(first, 2)}% / ${fmt(second, 2)}%`;
+  const level = getMasteryLevel(row.token, proficiencies);
+  const reduction = getMasteryInputReductionPercent(row.token, proficiencies);
+  return `Lv ${level} / ${fmt(reduction, 2)}% ${row.token}`;
 }
 
 function recipeRequests(row: FactoryDataRow | null | undefined, proficiencies: ProficiencyItem[]) {
   if (!row) return [] as Array<{ type: 'sell'; symbol: string; amount: number; key: string }>;
-  const input1Amount = adjustedInputAmount(row.input_token_1, row.input_amount_1, proficiencies);
+  const input1Amount = adjustedInputAmount(row.token, row.input_amount_1, proficiencies);
   const requests = [
     { type: 'sell' as const, symbol: row.output_token, amount: row.output_amount, key: sellKey(row.output_token, row.output_amount) },
     { type: 'sell' as const, symbol: row.input_token_1, amount: input1Amount, key: sellKey(row.input_token_1, input1Amount) },
   ];
   if (row.input_token_2 && row.input_amount_2 > 0) {
-    const input2Amount = adjustedInputAmount(row.input_token_2, row.input_amount_2, proficiencies);
+    const input2Amount = adjustedInputAmount(row.token, row.input_amount_2, proficiencies);
     requests.push({ type: 'sell' as const, symbol: row.input_token_2, amount: input2Amount, key: sellKey(row.input_token_2, input2Amount) });
   }
   return requests;
 }
 
 function recipeProfitPerHour(row: FactoryDataRow, quotes: QuoteMap, workshop: WorkshopItem[], proficiencies: ProficiencyItem[]) {
-  const input1Amount = adjustedInputAmount(row.input_token_1, row.input_amount_1, proficiencies);
-  const input2Amount = row.input_token_2 ? adjustedInputAmount(row.input_token_2, row.input_amount_2, proficiencies) : 0;
+  const input1Amount = adjustedInputAmount(row.token, row.input_amount_1, proficiencies);
+  const input2Amount = row.input_token_2 ? adjustedInputAmount(row.token, row.input_amount_2, proficiencies) : 0;
   const output = quotes[sellKey(row.output_token, row.output_amount)] || null;
   const input1 = quotes[sellKey(row.input_token_1, input1Amount)] || null;
   const input2 = row.input_token_2 ? quotes[sellKey(row.input_token_2, input2Amount)] || null : null;
@@ -124,8 +124,8 @@ function recipeProfitPerHour(row: FactoryDataRow, quotes: QuoteMap, workshop: Wo
 function craftCostForGap(producerRow: FactoryDataRow | null, gapAmount: number, quotes: QuoteMap, proficiencies: ProficiencyItem[]) {
   if (!producerRow || gapAmount <= 0 || producerRow.output_amount <= 0) return { cost: null as number | null, missing: false, impact: 0 };
 
-  const input1Amount = adjustedInputAmount(producerRow.input_token_1, producerRow.input_amount_1, proficiencies);
-  const input2Amount = producerRow.input_token_2 ? adjustedInputAmount(producerRow.input_token_2, producerRow.input_amount_2, proficiencies) : 0;
+  const input1Amount = adjustedInputAmount(producerRow.token, producerRow.input_amount_1, proficiencies);
+  const input2Amount = producerRow.input_token_2 ? adjustedInputAmount(producerRow.token, producerRow.input_amount_2, proficiencies) : 0;
   const input1 = quotes[sellKey(producerRow.input_token_1, input1Amount)] || null;
   const input2 = producerRow.input_token_2 ? quotes[sellKey(producerRow.input_token_2, input2Amount)] || null : null;
   const missing = !input1 || Boolean(producerRow.input_token_2 && !input2);
@@ -321,7 +321,7 @@ export default function UpgradeAdvisor() {
         <Card title="Upgrade Advisor">
           <div className="space-y-3">
             <p className="text-sm text-slate-300">
-              This shows the material needed for the next upgrade, what you already own, what you are missing, and whether buying or crafting the missing amount is cheaper. Workshop speed boosts and mastery input reductions are included.
+              This shows the material needed for the next upgrade, what you already own, what you are missing, and whether buying or crafting the missing amount is cheaper. Workshop speed boosts and factory resource mastery input reductions are included.
             </p>
             {quoteLoading && <p className="text-sm text-slate-400">Loading prices... {quotedCount}/{quoteRequests.length} quotes checked.</p>}
             {error && <p className="text-sm text-red-300">{error}</p>}
@@ -330,8 +330,8 @@ export default function UpgradeAdvisor() {
                 <p className="font-semibold text-emerald-200">Best upgrade candidate</p>
                 <p>{rowLabel(bestUpgrade.option)}</p>
                 <p>Workshop speed boost: {fmt(bestUpgrade.workshopBoostPercent, 2)}%</p>
-                <p>Current recipe mastery reductions: {bestUpgrade.currentMasteryText}</p>
-                <p>Next recipe mastery reductions: {bestUpgrade.nextMasteryText}</p>
+                <p>Current recipe mastery: {bestUpgrade.currentMasteryText}</p>
+                <p>Next recipe mastery: {bestUpgrade.nextMasteryText}</p>
                 <p>Need: {fmt(bestUpgrade.needAmount)} {bestUpgrade.needToken}</p>
                 <p>Own: {fmt(bestUpgrade.ownAmount)} {bestUpgrade.needToken}</p>
                 <p>Missing: {fmt(bestUpgrade.gapAmount)} {bestUpgrade.needToken}</p>
