@@ -93,6 +93,10 @@ function getUpgradeBuyQuoteRequest(row: FactoryDataRow | null) {
   };
 }
 
+function getUpgradeCostRow(option: OwnedFactoryOption) {
+  return option.nextRow;
+}
+
 function getRecipeProfitPerHour(row: FactoryDataRow | null, quotes: QuoteMap) {
   if (!row) return { profitPerHour: 0, missingQuote: true, maxImpact: 0 };
 
@@ -181,7 +185,7 @@ export default function UpgradeAdvisor() {
         if (!byKey.has(request.key)) byKey.set(request.key, request);
       });
 
-      const upgradeRequest = getUpgradeBuyQuoteRequest(option.currentRow);
+      const upgradeRequest = getUpgradeBuyQuoteRequest(getUpgradeCostRow(option));
       if (upgradeRequest && !byKey.has(upgradeRequest.key)) byKey.set(upgradeRequest.key, upgradeRequest);
     });
 
@@ -245,8 +249,9 @@ export default function UpgradeAdvisor() {
       .map((option) => {
         const current = getRecipeProfitPerHour(option.currentRow, quotes);
         const next = getRecipeProfitPerHour(option.nextRow, quotes);
-        const upgradeToken = option.currentRow?.upgrade_token || '';
-        const upgradeAmount = option.currentRow?.upgrade_amount || 0;
+        const upgradeCostRow = getUpgradeCostRow(option);
+        const upgradeToken = upgradeCostRow?.upgrade_token || '';
+        const upgradeAmount = upgradeCostRow?.upgrade_amount || 0;
         const upgradeQuote = upgradeToken ? quotes[buyQuoteKey(upgradeToken, upgradeAmount)] || null : null;
         const upgradeCost = upgradeQuote?.input.amount || 0;
         const profitGainPerHour = next.profitPerHour - current.profitPerHour;
@@ -290,7 +295,7 @@ export default function UpgradeAdvisor() {
         <Card title="Upgrade Advisor">
           <div className="space-y-3">
             <p className="text-sm text-slate-300">
-              This compares your current factory level against the next level, estimates the added COIN profit per hour, then calculates upgrade break even time using a buy quote for the exact upgrade resource amount.
+              This compares your current factory level against the next level. Upgrade requirements are read from the next level row, then quoted as the COIN buy cost for that exact resource amount.
             </p>
             {quoteLoading && (
               <p className="text-sm text-slate-400">
