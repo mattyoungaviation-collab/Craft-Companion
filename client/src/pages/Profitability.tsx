@@ -3,6 +3,7 @@ import Card from '../components/Card';
 import Layout from '../components/Layout';
 import { getCraftworldHome, getCraftworldQuote } from '../services/api';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
+import { getRunsPerHourWithWorkshop, getWorkshopSpeedBoostPercent, type WorkshopItem } from '../services/workshopModifiers';
 
 type OwnedFactory = {
   id?: string;
@@ -40,6 +41,7 @@ type ProfitAdvisorRow = {
   profitPerRun: number;
   profitPerHour: number;
   runsPerHour: number;
+  workshopBoostPercent: number;
   missingQuote: boolean;
   maxImpact: number;
 };
@@ -90,6 +92,7 @@ function QuoteLine({ label, quote }: { label: string; quote: Quote | null | unde
 export default function Profitability() {
   const [rows, setRows] = useState<FactoryDataRow[]>([]);
   const [ownedFactories, setOwnedFactories] = useState<OwnedFactory[]>([]);
+  const [workshop, setWorkshop] = useState<WorkshopItem[]>([]);
   const [selectedFactoryKey, setSelectedFactoryKey] = useState('');
   const [quotes, setQuotes] = useState<QuoteMap>({});
   const [loading, setLoading] = useState(true);
@@ -107,6 +110,7 @@ export default function Profitability() {
         const [factoryRows, homeData] = await Promise.all([loadFactoryData(), getCraftworldHome()]);
         setRows(factoryRows);
         setOwnedFactories(homeData.factories || []);
+        setWorkshop(homeData.workshop || []);
       } catch {
         setError('Unable to load profitability data. Refresh and try again.');
       } finally {
@@ -239,7 +243,7 @@ export default function Profitability() {
         const outputValue = outputQuote?.output.amount || 0;
         const inputCost = (input1Quote?.output.amount || 0) + (input2Quote?.output.amount || 0);
         const profitPerRun = outputValue - inputCost;
-        const runsPerHour = row.duration_min ? 60 / row.duration_min : 0;
+        const runsPerHour = getRunsPerHourWithWorkshop(row.duration_min, row.token, workshop);
         const profitPerHour = profitPerRun * runsPerHour;
         const impacts = [outputQuote, input1Quote, input2Quote]
           .map((quote) => quote?.details?.priceImpactPercentage || 0)
@@ -253,12 +257,13 @@ export default function Profitability() {
           profitPerRun,
           profitPerHour,
           runsPerHour,
+          workshopBoostPercent: getWorkshopSpeedBoostPercent(row.token, workshop),
           missingQuote: !outputQuote || !input1Quote || Boolean(row.input_token_2 && !input2Quote),
           maxImpact: impacts.length ? Math.max(...impacts) : 0,
         };
       })
       .sort((a, b) => b.profitPerHour - a.profitPerHour);
-  }, [ownedFactoryOptions, quotes]);
+  }, [ownedFactoryOptions, quotes, workshop]);
 
   const bestAdvisorRow = advisorRows.find((row) => !row.missingQuote) || null;
   const missingCsvMatches = ownedFactoryOptions.filter((option) => !option.matchingCsvRow).length;
@@ -268,11 +273,12 @@ export default function Profitability() {
   const input1Quote = selectedRow ? getQuote(selectedRow.input_token_1, selectedRow.input_amount_1) : null;
   const input2Quote = selectedRow?.input_token_2 ? getQuote(selectedRow.input_token_2, selectedRow.input_amount_2) : null;
   const upgradeQuote = selectedRow?.upgrade_token ? getQuote(selectedRow.upgrade_token, selectedRow.upgrade_amount) : null;
+  const selectedWorkshopBoostPercent = selectedRow ? getWorkshopSpeedBoostPercent(selectedRow.token, workshop) : 0;
 
   const inputCost = (input1Quote?.output.amount || 0) + (input2Quote?.output.amount || 0);
   const outputValue = outputQuote?.output.amount || 0;
   const profitPerRun = outputValue - inputCost;
-  const runsPerHour = selectedRow?.duration_min ? 60 / selectedRow.duration_min : 0;
+  const runsPerHour = selectedRow ? getRunsPerHourWithWorkshop(selectedRow.duration_min, selectedRow.token, workshop) : 0;
   const profitPerHour = profitPerRun * runsPerHour;
   const upgradeCost = upgradeQuote?.output.amount || 0;
 
@@ -290,7 +296,7 @@ export default function Profitability() {
         <Card title="Profit Advisor">
           <div className="space-y-3">
             <p className="text-sm text-slate-300">
-              This ranks every owned factory that matches the CSV by estimated COIN profit per hour using live Craft World quotes.
+              This ranks every owned factory that matches the CSV by estimated COIN profit per hour using live Craft World quotes and your workshop speed boosts.
             </p>
             {quoteLoading && (
               <p className="text-sm text-slate-400">
@@ -306,6 +312,7 @@ export default function Profitability() {
               <div className="rounded-lg border border-emerald-400/70 bg-emerald-500/10 p-3 text-sm">
                 <p className="font-semibold text-emerald-200">Best visible craft right now</p>
                 <p>{formatFactoryLabel(bestAdvisorRow.option)}</p>
+                <p>Workshop speed boost: {formatNumber(bestAdvisorRow.workshopBoostPercent, 2)}%</p>
                 <p>Estimated profit per hour: {formatNumber(bestAdvisorRow.profitPerHour)} COIN</p>
                 <p>Estimated profit per run: {formatNumber(bestAdvisorRow.profitPerRun)} COIN</p>
               </div>
@@ -318,11 +325,12 @@ export default function Profitability() {
         {advisorRows.length > 0 && (
           <Card title="All Matched Factories Ranked">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
+              <table className="w-full min-w-[860px] text-left text-sm">
                 <thead className="text-slate-300">
                   <tr>
                     <th className="p-2">Rank</th>
                     <th className="p-2">Factory</th>
+                    <th className="p-2">Workshop</th>
                     <th className="p-2">Profit Per Hour</th>
                     <th className="p-2">Profit Per Run</th>
                     <th className="p-2">Input Value</th>
@@ -336,6 +344,7 @@ export default function Profitability() {
                     <tr key={advisorRow.option.key} className="border-t border-slate-800">
                       <td className="p-2">{index + 1}</td>
                       <td className="p-2">{formatFactoryLabel(advisorRow.option)}</td>
+                      <td className="p-2">{formatNumber(advisorRow.workshopBoostPercent, 2)}%</td>
                       <td className={advisorRow.profitPerHour >= 0 ? 'p-2 text-emerald-300' : 'p-2 text-red-300'}>
                         {advisorRow.missingQuote ? 'Waiting' : `${formatNumber(advisorRow.profitPerHour)} COIN`}
                       </td>
@@ -363,7 +372,7 @@ export default function Profitability() {
               Output value uses the sell quote: output token → COIN. Input costs use the same token → COIN value so returns compare against what those inputs are worth in COIN.
             </p>
             <p className="text-sm text-yellow-200">
-              All prices are quoted in COIN using Craft World exact input quotes. Values include the built in 2.5% fee plus impact and slippage returned by Craft World.
+              Profit per hour includes your workshop speed boost for the factory resource.
             </p>
 
             {error && <p className="text-sm text-red-300">{error}</p>}
@@ -407,7 +416,8 @@ export default function Profitability() {
                 <p>Owned Display Level: {selectedFactory.displayLevel}</p>
                 <p>Craft Level: {selectedFactory.craftDisplayLevel || 'N/A'}</p>
                 <p>CSV Level: {selectedRow.level}</p>
-                <p>Duration: {formatNumber(selectedRow.duration_min, 2)} min</p>
+                <p>Original Duration: {formatNumber(selectedRow.duration_min, 2)} min</p>
+                <p>Workshop Speed Boost: {formatNumber(selectedWorkshopBoostPercent, 2)}%</p>
                 <p>Output: {formatNumber(selectedRow.output_amount)} {selectedRow.output_token}</p>
                 <p>Input 1: {formatNumber(selectedRow.input_amount_1)} {selectedRow.input_token_1}</p>
                 <p>Input 2: {selectedRow.input_token_2 ? `${formatNumber(selectedRow.input_amount_2)} ${selectedRow.input_token_2}` : 'N/A'}</p>
