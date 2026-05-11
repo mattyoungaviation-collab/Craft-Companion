@@ -10,6 +10,7 @@ export default function Layout({ children }: { children: any }) {
           <Link to="/home">My Home</Link>
           <Link to="/profitability">Profitability</Link>
           <Link to="/inventory-value">Inventory Value</Link>
+          <Link to="/upgrade-advisor">Upgrade Advisor</Link>
           <Link to="/matrix">Matrix</Link>
           <button
             onClick={() => {
