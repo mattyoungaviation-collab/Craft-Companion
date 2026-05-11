@@ -3,6 +3,7 @@ import Card from '../components/Card';
 import Layout from '../components/Layout';
 import { getCraftworldBuyQuote, getCraftworldHome, getCraftworldQuote } from '../services/api';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
+import { getRunsPerHourWithWorkshop, getWorkshopSpeedBoostPercent, type WorkshopItem } from '../services/workshopModifiers';
 
 type OwnedFactory = { id?: string; areaSymbol?: string; level?: number; landPlotName?: string };
 type ResourceAmount = { symbol?: string; amount?: number };
@@ -30,6 +31,9 @@ type AdvisorRow = {
   bestCost: number | null;
   bestChoice: string;
   gainPerHour: number;
+  currentProfitPerHour: number;
+  nextProfitPerHour: number;
+  workshopBoostPercent: number;
   breakEvenHours: number;
   impact: number;
   ready: boolean;
@@ -81,7 +85,7 @@ function recipeRequests(row?: FactoryDataRow | null) {
   return requests;
 }
 
-function recipeProfitPerHour(row: FactoryDataRow, quotes: QuoteMap) {
+function recipeProfitPerHour(row: FactoryDataRow, quotes: QuoteMap, workshop: WorkshopItem[]) {
   const output = quotes[sellKey(row.output_token, row.output_amount)] || null;
   const input1 = quotes[sellKey(row.input_token_1, row.input_amount_1)] || null;
   const input2 = row.input_token_2 ? quotes[sellKey(row.input_token_2, row.input_amount_2)] || null : null;
@@ -90,7 +94,7 @@ function recipeProfitPerHour(row: FactoryDataRow, quotes: QuoteMap) {
 
   const inputCost = input1.output.amount + (input2?.output.amount || 0);
   const profitPerRun = output.output.amount - inputCost;
-  const runsPerHour = row.duration_min ? 60 / row.duration_min : 0;
+  const runsPerHour = getRunsPerHourWithWorkshop(row.duration_min, row.token, workshop);
   const impact = Math.max(
     output.details?.priceImpactPercentage || 0,
     input1.details?.priceImpactPercentage || 0,
@@ -119,6 +123,7 @@ export default function UpgradeAdvisor() {
   const [rows, setRows] = useState<FactoryDataRow[]>([]);
   const [ownedFactories, setOwnedFactories] = useState<OwnedFactory[]>([]);
   const [inventory, setInventory] = useState<Record<string, number>>({});
+  const [workshop, setWorkshop] = useState<WorkshopItem[]>([]);
   const [quotes, setQuotes] = useState<QuoteMap>({});
   const [loading, setLoading] = useState(true);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -134,6 +139,7 @@ export default function UpgradeAdvisor() {
         setRows(factoryRows);
         setOwnedFactories(homeData.factories || []);
         setInventory(inventoryMap(homeData.inventory || []));
+        setWorkshop(homeData.workshop || []);
       } catch {
         setError('Unable to load upgrade advisor data. Refresh and try again.');
       } finally {
@@ -235,8 +241,8 @@ export default function UpgradeAdvisor() {
 
   const advisorRows = useMemo<AdvisorRow[]>(() => {
     return options.map((option) => {
-      const current = recipeProfitPerHour(option.currentRow, quotes);
-      const next = recipeProfitPerHour(option.nextRow, quotes);
+      const current = recipeProfitPerHour(option.currentRow, quotes, workshop);
+      const next = recipeProfitPerHour(option.nextRow, quotes, workshop);
       const needToken = option.nextRow.upgrade_token;
       const needAmount = option.nextRow.upgrade_amount;
       const ownAmount = inventory[needToken] || 0;
@@ -263,6 +269,9 @@ export default function UpgradeAdvisor() {
         bestCost,
         bestChoice,
         gainPerHour,
+        currentProfitPerHour: current.value,
+        nextProfitPerHour: next.value,
+        workshopBoostPercent: getWorkshopSpeedBoostPercent(option.symbol, workshop),
         breakEvenHours,
         impact,
         ready,
@@ -271,7 +280,7 @@ export default function UpgradeAdvisor() {
       if (a.ready !== b.ready) return a.ready ? -1 : 1;
       return a.breakEvenHours - b.breakEvenHours;
     });
-  }, [inventory, options, producerRows, quotes]);
+  }, [inventory, options, producerRows, quotes, workshop]);
 
   const bestUpgrade = advisorRows.find((row) => row.ready && row.gainPerHour > 0) || null;
 
@@ -289,7 +298,7 @@ export default function UpgradeAdvisor() {
         <Card title="Upgrade Advisor">
           <div className="space-y-3">
             <p className="text-sm text-slate-300">
-              This shows the material needed for the next upgrade, what you already own, what you are missing, and whether buying or crafting the missing amount is cheaper.
+              This shows the material needed for the next upgrade, what you already own, what you are missing, and whether buying or crafting the missing amount is cheaper. Workshop speed boosts are included in profit per hour.
             </p>
             {quoteLoading && <p className="text-sm text-slate-400">Loading prices... {quotedCount}/{quoteRequests.length} quotes checked.</p>}
             {error && <p className="text-sm text-red-300">{error}</p>}
@@ -297,12 +306,15 @@ export default function UpgradeAdvisor() {
               <div className="rounded-lg border border-emerald-400/70 bg-emerald-500/10 p-3 text-sm">
                 <p className="font-semibold text-emerald-200">Best upgrade candidate</p>
                 <p>{rowLabel(bestUpgrade.option)}</p>
+                <p>Workshop speed boost: {fmt(bestUpgrade.workshopBoostPercent, 2)}%</p>
                 <p>Need: {fmt(bestUpgrade.needAmount)} {bestUpgrade.needToken}</p>
                 <p>Own: {fmt(bestUpgrade.ownAmount)} {bestUpgrade.needToken}</p>
                 <p>Missing: {fmt(bestUpgrade.gapAmount)} {bestUpgrade.needToken}</p>
                 <p>Buy cost: {bestUpgrade.buyCost === null ? 'Waiting' : `${fmt(bestUpgrade.buyCost)} COIN`}</p>
                 <p>Craft cost: {bestUpgrade.craftCost === null ? 'Not available' : `${fmt(bestUpgrade.craftCost)} COIN`}</p>
                 <p>Best choice: {bestUpgrade.bestChoice}</p>
+                <p>Current profit per hour: {fmt(bestUpgrade.currentProfitPerHour)} COIN</p>
+                <p>Next profit per hour: {fmt(bestUpgrade.nextProfitPerHour)} COIN</p>
                 <p>Break even: {fmtHours(bestUpgrade.breakEvenHours)}</p>
               </div>
             ) : <p className="text-sm text-slate-400">No upgrade recommendation is ready yet.</p>}
@@ -312,17 +324,20 @@ export default function UpgradeAdvisor() {
         <Card title="All Upgrade Candidates">
           {advisorRows.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1180px] text-left text-sm">
+              <table className="w-full min-w-[1320px] text-left text-sm">
                 <thead className="text-slate-300">
                   <tr>
                     <th className="p-2">Rank</th>
                     <th className="p-2">Factory</th>
+                    <th className="p-2">Workshop</th>
                     <th className="p-2">Need</th>
                     <th className="p-2">Own</th>
                     <th className="p-2">Missing</th>
                     <th className="p-2">Buy Cost</th>
                     <th className="p-2">Craft Cost</th>
                     <th className="p-2">Best Choice</th>
+                    <th className="p-2">Current Profit/Hr</th>
+                    <th className="p-2">Next Profit/Hr</th>
                     <th className="p-2">Gain/Hr</th>
                     <th className="p-2">Break Even</th>
                     <th className="p-2">Impact</th>
@@ -334,12 +349,15 @@ export default function UpgradeAdvisor() {
                     <tr key={row.option.key} className="border-t border-slate-800">
                       <td className="p-2">{index + 1}</td>
                       <td className="p-2">{rowLabel(row.option)}</td>
+                      <td className="p-2">{fmt(row.workshopBoostPercent, 2)}%</td>
                       <td className="p-2">{fmt(row.needAmount)} {row.needToken}</td>
                       <td className="p-2">{fmt(row.ownAmount)} {row.needToken}</td>
                       <td className="p-2">{fmt(row.gapAmount)} {row.needToken}</td>
                       <td className="p-2">{row.buyCost === null ? 'Waiting' : `${fmt(row.buyCost)} COIN`}</td>
                       <td className="p-2">{row.craftCost === null ? 'Not available' : `${fmt(row.craftCost)} COIN`}</td>
                       <td className="p-2 font-semibold">{row.bestChoice}</td>
+                      <td className="p-2">{row.ready ? `${fmt(row.currentProfitPerHour)} COIN` : 'Waiting'}</td>
+                      <td className="p-2">{row.ready ? `${fmt(row.nextProfitPerHour)} COIN` : 'Waiting'}</td>
                       <td className={row.gainPerHour >= 0 ? 'p-2 text-emerald-300' : 'p-2 text-red-300'}>{row.ready ? `${fmt(row.gainPerHour)} COIN` : 'Waiting'}</td>
                       <td className="p-2">{row.ready ? fmtHours(row.breakEvenHours) : 'Waiting'}</td>
                       <td className="p-2">{row.ready ? `${fmt(row.impact, 2)}%` : 'Waiting'}</td>
