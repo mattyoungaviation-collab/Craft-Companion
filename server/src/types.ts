@@ -51,6 +51,12 @@ export type VaultSummary = { symbol: string; amount: number; capacity: number; i
 export type WorkshopItem = { symbol: string; level: number };
 export type ProficiencyItem = { symbol: string; collectedAmount: number; claimedLevel: number };
 export type CurrencyBalance = { type: string; amount: number };
+export type CraftworldConnectionStatus = {
+  isLive: boolean;
+  source: 'live' | 'mock' | 'public_profile_fallback';
+  message: string;
+  checkedAt: string;
+};
 export type CraftworldHomeData = {
   profile: { uid?: string; displayName?: string; avatarUrl?: string; walletAddress?: string };
   account: { id: string; experiencePoints: number; power: number; powerLastRefill?: string; skillPoints: number; updatedAt?: string; lastUserActionAt?: string; walletAddress?: string };
@@ -62,6 +68,7 @@ export type CraftworldHomeData = {
   proficiencies: ProficiencyItem[];
   currencies: CurrencyBalance[];
   lastSyncedAt: string;
+  connection?: CraftworldConnectionStatus;
 };
 
 export type CraftworldProfileBadge = {
