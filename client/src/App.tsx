@@ -7,6 +7,7 @@ import Matrix from './pages/Matrix';
 import MyHome from './pages/MyHome';
 import Profitability from './pages/Profitability';
 import SignIn from './pages/SignIn';
+import UpgradeAdvisor from './pages/UpgradeAdvisor';
 
 export default function App() {
   return (
@@ -36,6 +37,14 @@ export default function App() {
           element={(
             <ProtectedRoute>
               <InventoryValue />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/upgrade-advisor"
+          element={(
+            <ProtectedRoute>
+              <UpgradeAdvisor />
             </ProtectedRoute>
           )}
         />
