@@ -3,7 +3,6 @@ import Card from '../components/Card';
 import Layout from '../components/Layout';
 import { getCraftworldHome, getCraftworldQuote } from '../services/api';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
-import { enqueueQuoteRequest } from '../utils/rateLimit';
 
 type OwnedFactory = {
   id?: string;
@@ -44,6 +43,8 @@ type ProfitAdvisorRow = {
   missingQuote: boolean;
   maxImpact: number;
 };
+
+const QUOTE_BATCH_SIZE = 12;
 
 function formatNumber(value: number, digits = 6) {
   return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: digits }) : '0';
@@ -93,6 +94,7 @@ export default function Profitability() {
   const [quotes, setQuotes] = useState<QuoteMap>({});
   const [loading, setLoading] = useState(true);
   const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quotedCount, setQuotedCount] = useState(0);
   const [error, setError] = useState('');
   const [quoteError, setQuoteError] = useState('');
 
@@ -164,6 +166,10 @@ export default function Profitability() {
   const quoteRequests = useMemo(() => {
     const byKey = new Map<string, { symbol: string; amount: number; key: string; label: string }>();
 
+    if (selectedRow) {
+      getRowQuoteRequests(selectedRow).forEach((request) => byKey.set(request.key, request));
+    }
+
     ownedFactoryOptions.forEach((option) => {
       if (!option.matchingCsvRow) return;
       getRowQuoteRequests(option.matchingCsvRow).forEach((request) => {
@@ -172,7 +178,7 @@ export default function Profitability() {
     });
 
     return Array.from(byKey.values());
-  }, [ownedFactoryOptions]);
+  }, [ownedFactoryOptions, selectedRow]);
 
   useEffect(() => {
     if (!quoteRequests.length) return;
@@ -181,21 +187,31 @@ export default function Profitability() {
     const loadQuotes = async () => {
       setQuoteLoading(true);
       setQuoteError('');
+      setQuotedCount(0);
 
       try {
-        for (const request of quoteRequests) {
-          if (quotes[request.key] !== undefined) continue;
+        const missingRequests = quoteRequests.filter((request) => quotes[request.key] === undefined);
 
-          try {
-            const quote = await enqueueQuoteRequest(() => getCraftworldQuote({
-              inputSymbol: request.symbol,
-              outputSymbol: 'COIN',
-              inputAmount: request.amount,
-            }));
-            if (!cancelled) setQuotes((current) => ({ ...current, [request.key]: quote }));
-          } catch {
-            if (!cancelled) setQuotes((current) => ({ ...current, [request.key]: null }));
-          }
+        for (let index = 0; index < missingRequests.length; index += QUOTE_BATCH_SIZE) {
+          const batch = missingRequests.slice(index, index + QUOTE_BATCH_SIZE);
+          const entries = await Promise.all(
+            batch.map(async (request) => {
+              try {
+                const quote = await getCraftworldQuote({
+                  inputSymbol: request.symbol,
+                  outputSymbol: 'COIN',
+                  inputAmount: request.amount,
+                });
+                return [request.key, quote] as const;
+              } catch {
+                return [request.key, null] as const;
+              }
+            }),
+          );
+
+          if (cancelled) return;
+          setQuotes((current) => ({ ...current, ...Object.fromEntries(entries) }));
+          setQuotedCount((current) => current + entries.length);
         }
       } catch {
         if (!cancelled) setQuoteError('Unable to load one or more Craft World quotes.');
@@ -208,7 +224,7 @@ export default function Profitability() {
     return () => {
       cancelled = true;
     };
-  }, [quoteRequests, quotes]);
+  }, [quoteRequests]);
 
   const getQuote = (symbol: string, amount: number) => quotes[quoteKey(symbol, amount)] || null;
 
@@ -246,6 +262,7 @@ export default function Profitability() {
 
   const bestAdvisorRow = advisorRows.find((row) => !row.missingQuote) || null;
   const missingCsvMatches = ownedFactoryOptions.filter((option) => !option.matchingCsvRow).length;
+  const readyAdvisorRows = advisorRows.filter((row) => !row.missingQuote);
 
   const outputQuote = selectedRow ? getQuote(selectedRow.output_token, selectedRow.output_amount) : null;
   const input1Quote = selectedRow ? getQuote(selectedRow.input_token_1, selectedRow.input_amount_1) : null;
@@ -275,7 +292,11 @@ export default function Profitability() {
             <p className="text-sm text-slate-300">
               This ranks every owned factory that matches the CSV by estimated COIN profit per hour using live Craft World quotes.
             </p>
-            {quoteLoading && <p className="text-sm text-slate-400">Loading live quote data...</p>}
+            {quoteLoading && (
+              <p className="text-sm text-slate-400">
+                Loading live quote data in parallel batches... {quotedCount}/{quoteRequests.length} quotes checked.
+              </p>
+            )}
             {missingCsvMatches > 0 && (
               <p className="text-sm text-yellow-200">
                 {missingCsvMatches} owned factories do not have a CSV match yet, so they are excluded from the ranking.
@@ -311,19 +332,19 @@ export default function Profitability() {
                   </tr>
                 </thead>
                 <tbody>
-                  {advisorRows.map((advisorRow, index) => (
+                  {(readyAdvisorRows.length ? readyAdvisorRows : advisorRows).map((advisorRow, index) => (
                     <tr key={advisorRow.option.key} className="border-t border-slate-800">
                       <td className="p-2">{index + 1}</td>
                       <td className="p-2">{formatFactoryLabel(advisorRow.option)}</td>
                       <td className={advisorRow.profitPerHour >= 0 ? 'p-2 text-emerald-300' : 'p-2 text-red-300'}>
-                        {formatNumber(advisorRow.profitPerHour)} COIN
+                        {advisorRow.missingQuote ? 'Waiting' : `${formatNumber(advisorRow.profitPerHour)} COIN`}
                       </td>
                       <td className={advisorRow.profitPerRun >= 0 ? 'p-2 text-emerald-300' : 'p-2 text-red-300'}>
-                        {formatNumber(advisorRow.profitPerRun)} COIN
+                        {advisorRow.missingQuote ? 'Waiting' : `${formatNumber(advisorRow.profitPerRun)} COIN`}
                       </td>
-                      <td className="p-2">{formatNumber(advisorRow.inputCost)} COIN</td>
-                      <td className="p-2">{formatNumber(advisorRow.outputValue)} COIN</td>
-                      <td className="p-2">{formatNumber(advisorRow.maxImpact, 2)}%</td>
+                      <td className="p-2">{advisorRow.missingQuote ? 'Waiting' : `${formatNumber(advisorRow.inputCost)} COIN`}</td>
+                      <td className="p-2">{advisorRow.missingQuote ? 'Waiting' : `${formatNumber(advisorRow.outputValue)} COIN`}</td>
+                      <td className="p-2">{advisorRow.missingQuote ? 'Waiting' : `${formatNumber(advisorRow.maxImpact, 2)}%`}</td>
                       <td className="p-2">{advisorRow.missingQuote ? 'Waiting for quote' : 'Ready'}</td>
                     </tr>
                   ))}
@@ -342,7 +363,7 @@ export default function Profitability() {
               Output value uses the sell quote: output token → COIN. Input costs use the same token → COIN value so returns compare against what those inputs are worth in COIN.
             </p>
             <p className="text-sm text-yellow-200">
-              All prices are quoted in COIN using Craft World exact input quotes. Values include the built in 2.5% fee plus impact and slippage returned by Craft World. Quote calls are limited to one request every 0.25 seconds.
+              All prices are quoted in COIN using Craft World exact input quotes. Values include the built in 2.5% fee plus impact and slippage returned by Craft World.
             </p>
 
             {error && <p className="text-sm text-red-300">{error}</p>}
