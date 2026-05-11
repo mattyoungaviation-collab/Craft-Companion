@@ -21,6 +21,7 @@ type FactorySummary = {
 };
 type VaultSummary = { symbol?: string; amount?: number; capacity?: number; isUnlocked?: boolean };
 type WorkshopItem = { symbol?: string; level?: number };
+type ProficiencyItem = { symbol?: string; collectedAmount?: number; claimedLevel?: number };
 type CurrencyBalance = { type?: string; amount?: number };
 type ProfileData = {
   uid: string;
@@ -50,7 +51,7 @@ type HomeData = {
   inventory?: ResourceAmount[];
   vaults?: VaultSummary[];
   workshop?: WorkshopItem[];
-  proficiencies?: unknown[];
+  proficiencies?: ProficiencyItem[];
   currencies?: CurrencyBalance[];
 };
 
@@ -69,6 +70,10 @@ function EmptyState({ children }: { children: string }) {
 
 function displayNumber(value: unknown) {
   return typeof value === 'number' ? value.toLocaleString() : 'Not connected';
+}
+
+function formatNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString() : '0';
 }
 
 function ipfsToHttp(url?: string) {
@@ -143,6 +148,7 @@ export default function MyHome() {
   const vaults = home.vaults || [];
   const workshop = home.workshop || [];
   const proficiencies = home.proficiencies || [];
+  const sortedProficiencies = [...proficiencies].sort((a, b) => String(a.symbol || '').localeCompare(String(b.symbol || '')));
   const currencies = home.currencies || [];
   const wallets = walletData?.wallets || [];
   const isCraftWorldConnected = Boolean(
@@ -350,7 +356,7 @@ export default function MyHome() {
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
               {inventory.map((r, i) => (
                 <div key={r.symbol || `resource-${i}`}>
-                  {r.symbol || 'Unknown'}: {r.amount ?? 0}
+                  {r.symbol || 'Unknown'}: {formatNumber(r.amount)}
                 </div>
               ))}
             </div>
@@ -363,7 +369,7 @@ export default function MyHome() {
           {vaults.length ? (
             vaults.map((v, i) => (
               <div key={v.symbol || `vault-${i}`}>
-                {v.symbol || 'Unknown'}: {v.amount ?? 0}/{v.capacity ?? 0} ({v.isUnlocked ? 'Unlocked' : 'Locked'})
+                {v.symbol || 'Unknown'}: {formatNumber(v.amount)}/{formatNumber(v.capacity)} ({v.isUnlocked ? 'Unlocked' : 'Locked'})
               </div>
             ))
           ) : (
@@ -375,7 +381,7 @@ export default function MyHome() {
           {workshop.length ? (
             workshop.map((w, i) => (
               <div key={w.symbol || `workshop-${i}`}>
-                {w.symbol || 'Unknown'}: Lv {w.level ?? 0}
+                {w.symbol || 'Unknown'}: Lv {formatNumber(w.level)}
               </div>
             ))
           ) : (
@@ -384,14 +390,48 @@ export default function MyHome() {
         </Card>
 
         <Card title="Proficiencies">
-          {proficiencies.length ? <div>{proficiencies.length} proficiencies loaded.</div> : <EmptyState>No proficiency data found yet.</EmptyState>}
+          {sortedProficiencies.length ? (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-300">
+                Showing collected amount and claimed proficiency level returned by Craft World.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] text-left text-sm">
+                  <thead className="text-slate-300">
+                    <tr>
+                      <th className="p-2">Resource</th>
+                      <th className="p-2">Collected Amount</th>
+                      <th className="p-2">Claimed Level</th>
+                      <th className="p-2">Next Visible Level</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedProficiencies.map((item, index) => {
+                      const symbol = item.symbol || 'Unknown';
+                      const claimedLevel = typeof item.claimedLevel === 'number' ? item.claimedLevel : 0;
+                      return (
+                        <tr key={`${symbol}-${index}`} className="border-t border-slate-800">
+                          <td className="p-2 font-semibold">{symbol}</td>
+                          <td className="p-2">{formatNumber(item.collectedAmount)}</td>
+                          <td className="p-2">{formatNumber(claimedLevel)}</td>
+                          <td className="p-2">{claimedLevel + 1}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <EmptyState>No proficiency data found yet.</EmptyState>
+          )}
         </Card>
 
         <Card title="Currencies">
           {currencies.length ? (
             currencies.map((c, i) => (
               <div key={c.type || `currency-${i}`}>
-                {c.type || 'Unknown'}: {c.amount ?? 0}
+                {c.type || 'Unknown'}: {formatNumber(c.amount)}
               </div>
             ))
           ) : (
