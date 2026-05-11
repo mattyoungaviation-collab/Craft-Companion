@@ -33,6 +33,18 @@ type Quote = {
 
 type QuoteMap = Record<string, Quote | null>;
 
+type ProfitAdvisorRow = {
+  option: OwnedFactoryOption;
+  row: FactoryDataRow;
+  outputValue: number;
+  inputCost: number;
+  profitPerRun: number;
+  profitPerHour: number;
+  runsPerHour: number;
+  missingQuote: boolean;
+  maxImpact: number;
+};
+
 function formatNumber(value: number, digits = 6) {
   return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: digits }) : '0';
 }
@@ -44,6 +56,23 @@ function formatFactoryLabel(option: OwnedFactoryOption) {
 
 function quoteKey(symbol: string, amount: number) {
   return `${symbol.toUpperCase()}-${amount}`;
+}
+
+function getRowQuoteRequests(row: FactoryDataRow) {
+  const requests = [
+    { symbol: row.output_token, amount: row.output_amount, key: quoteKey(row.output_token, row.output_amount), label: 'Output Sell Value' },
+    { symbol: row.input_token_1, amount: row.input_amount_1, key: quoteKey(row.input_token_1, row.input_amount_1), label: 'Input 1 Cost' },
+  ];
+
+  if (row.input_token_2 && row.input_amount_2 > 0) {
+    requests.push({ symbol: row.input_token_2, amount: row.input_amount_2, key: quoteKey(row.input_token_2, row.input_amount_2), label: 'Input 2 Cost' });
+  }
+
+  if (row.upgrade_token && row.upgrade_amount > 0) {
+    requests.push({ symbol: row.upgrade_token, amount: row.upgrade_amount, key: quoteKey(row.upgrade_token, row.upgrade_amount), label: 'Upgrade Cost' });
+  }
+
+  return requests;
 }
 
 function QuoteLine({ label, quote }: { label: string; quote: Quote | null | undefined }) {
@@ -133,43 +162,17 @@ export default function Profitability() {
   const selectedRow = selectedFactory?.matchingCsvRow || null;
 
   const quoteRequests = useMemo(() => {
-    if (!selectedRow) return [] as Array<{ symbol: string; amount: number; key: string; label: string }>;
+    const byKey = new Map<string, { symbol: string; amount: number; key: string; label: string }>();
 
-    const requests = [
-      {
-        symbol: selectedRow.output_token,
-        amount: selectedRow.output_amount,
-        key: quoteKey(selectedRow.output_token, selectedRow.output_amount),
-        label: 'Output Sell Value',
-      },
-      {
-        symbol: selectedRow.input_token_1,
-        amount: selectedRow.input_amount_1,
-        key: quoteKey(selectedRow.input_token_1, selectedRow.input_amount_1),
-        label: 'Input 1 Cost',
-      },
-    ];
-
-    if (selectedRow.input_token_2 && selectedRow.input_amount_2 > 0) {
-      requests.push({
-        symbol: selectedRow.input_token_2,
-        amount: selectedRow.input_amount_2,
-        key: quoteKey(selectedRow.input_token_2, selectedRow.input_amount_2),
-        label: 'Input 2 Cost',
+    ownedFactoryOptions.forEach((option) => {
+      if (!option.matchingCsvRow) return;
+      getRowQuoteRequests(option.matchingCsvRow).forEach((request) => {
+        if (!byKey.has(request.key)) byKey.set(request.key, request);
       });
-    }
+    });
 
-    if (selectedRow.upgrade_token && selectedRow.upgrade_amount > 0) {
-      requests.push({
-        symbol: selectedRow.upgrade_token,
-        amount: selectedRow.upgrade_amount,
-        key: quoteKey(selectedRow.upgrade_token, selectedRow.upgrade_amount),
-        label: 'Upgrade Cost',
-      });
-    }
-
-    return requests;
-  }, [selectedRow]);
+    return Array.from(byKey.values());
+  }, [ownedFactoryOptions]);
 
   useEffect(() => {
     if (!quoteRequests.length) return;
@@ -180,20 +183,19 @@ export default function Profitability() {
       setQuoteError('');
 
       try {
-        const nextQuotes: QuoteMap = {};
         for (const request of quoteRequests) {
+          if (quotes[request.key] !== undefined) continue;
+
           try {
             const quote = await enqueueQuoteRequest(() => getCraftworldQuote({
               inputSymbol: request.symbol,
               outputSymbol: 'COIN',
               inputAmount: request.amount,
             }));
-            nextQuotes[request.key] = quote;
+            if (!cancelled) setQuotes((current) => ({ ...current, [request.key]: quote }));
           } catch {
-            nextQuotes[request.key] = null;
+            if (!cancelled) setQuotes((current) => ({ ...current, [request.key]: null }));
           }
-
-          if (!cancelled) setQuotes((current) => ({ ...current, ...nextQuotes }));
         }
       } catch {
         if (!cancelled) setQuoteError('Unable to load one or more Craft World quotes.');
@@ -206,9 +208,44 @@ export default function Profitability() {
     return () => {
       cancelled = true;
     };
-  }, [quoteRequests]);
+  }, [quoteRequests, quotes]);
 
   const getQuote = (symbol: string, amount: number) => quotes[quoteKey(symbol, amount)] || null;
+
+  const advisorRows = useMemo<ProfitAdvisorRow[]>(() => {
+    return ownedFactoryOptions
+      .filter((option): option is OwnedFactoryOption & { matchingCsvRow: FactoryDataRow } => Boolean(option.matchingCsvRow))
+      .map((option) => {
+        const row = option.matchingCsvRow;
+        const outputQuote = getQuote(row.output_token, row.output_amount);
+        const input1Quote = getQuote(row.input_token_1, row.input_amount_1);
+        const input2Quote = row.input_token_2 ? getQuote(row.input_token_2, row.input_amount_2) : null;
+        const outputValue = outputQuote?.output.amount || 0;
+        const inputCost = (input1Quote?.output.amount || 0) + (input2Quote?.output.amount || 0);
+        const profitPerRun = outputValue - inputCost;
+        const runsPerHour = row.duration_min ? 60 / row.duration_min : 0;
+        const profitPerHour = profitPerRun * runsPerHour;
+        const impacts = [outputQuote, input1Quote, input2Quote]
+          .map((quote) => quote?.details?.priceImpactPercentage || 0)
+          .filter((impact) => Number.isFinite(impact));
+
+        return {
+          option,
+          row,
+          outputValue,
+          inputCost,
+          profitPerRun,
+          profitPerHour,
+          runsPerHour,
+          missingQuote: !outputQuote || !input1Quote || Boolean(row.input_token_2 && !input2Quote),
+          maxImpact: impacts.length ? Math.max(...impacts) : 0,
+        };
+      })
+      .sort((a, b) => b.profitPerHour - a.profitPerHour);
+  }, [ownedFactoryOptions, quotes]);
+
+  const bestAdvisorRow = advisorRows.find((row) => !row.missingQuote) || null;
+  const missingCsvMatches = ownedFactoryOptions.filter((option) => !option.matchingCsvRow).length;
 
   const outputQuote = selectedRow ? getQuote(selectedRow.output_token, selectedRow.output_amount) : null;
   const input1Quote = selectedRow ? getQuote(selectedRow.input_token_1, selectedRow.input_amount_1) : null;
@@ -233,6 +270,69 @@ export default function Profitability() {
   return (
     <Layout>
       <div className="space-y-4">
+        <Card title="Profit Advisor">
+          <div className="space-y-3">
+            <p className="text-sm text-slate-300">
+              This ranks every owned factory that matches the CSV by estimated COIN profit per hour using live Craft World quotes.
+            </p>
+            {quoteLoading && <p className="text-sm text-slate-400">Loading live quote data...</p>}
+            {missingCsvMatches > 0 && (
+              <p className="text-sm text-yellow-200">
+                {missingCsvMatches} owned factories do not have a CSV match yet, so they are excluded from the ranking.
+              </p>
+            )}
+            {bestAdvisorRow ? (
+              <div className="rounded-lg border border-emerald-400/70 bg-emerald-500/10 p-3 text-sm">
+                <p className="font-semibold text-emerald-200">Best visible craft right now</p>
+                <p>{formatFactoryLabel(bestAdvisorRow.option)}</p>
+                <p>Estimated profit per hour: {formatNumber(bestAdvisorRow.profitPerHour)} COIN</p>
+                <p>Estimated profit per run: {formatNumber(bestAdvisorRow.profitPerRun)} COIN</p>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">No fully quoted factory recommendation is available yet.</p>
+            )}
+          </div>
+        </Card>
+
+        {advisorRows.length > 0 && (
+          <Card title="All Matched Factories Ranked">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                <thead className="text-slate-300">
+                  <tr>
+                    <th className="p-2">Rank</th>
+                    <th className="p-2">Factory</th>
+                    <th className="p-2">Profit Per Hour</th>
+                    <th className="p-2">Profit Per Run</th>
+                    <th className="p-2">Input Value</th>
+                    <th className="p-2">Output Value</th>
+                    <th className="p-2">Impact</th>
+                    <th className="p-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {advisorRows.map((advisorRow, index) => (
+                    <tr key={advisorRow.option.key} className="border-t border-slate-800">
+                      <td className="p-2">{index + 1}</td>
+                      <td className="p-2">{formatFactoryLabel(advisorRow.option)}</td>
+                      <td className={advisorRow.profitPerHour >= 0 ? 'p-2 text-emerald-300' : 'p-2 text-red-300'}>
+                        {formatNumber(advisorRow.profitPerHour)} COIN
+                      </td>
+                      <td className={advisorRow.profitPerRun >= 0 ? 'p-2 text-emerald-300' : 'p-2 text-red-300'}>
+                        {formatNumber(advisorRow.profitPerRun)} COIN
+                      </td>
+                      <td className="p-2">{formatNumber(advisorRow.inputCost)} COIN</td>
+                      <td className="p-2">{formatNumber(advisorRow.outputValue)} COIN</td>
+                      <td className="p-2">{formatNumber(advisorRow.maxImpact, 2)}%</td>
+                      <td className="p-2">{advisorRow.missingQuote ? 'Waiting for quote' : 'Ready'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+
         <Card title="Profitability Calculator">
           <div className="space-y-3">
             <p className="text-sm text-slate-300">
