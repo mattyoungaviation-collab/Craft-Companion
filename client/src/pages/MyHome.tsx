@@ -39,6 +39,12 @@ type WalletData = {
 
 type HomeData = {
   lastSyncedAt?: string;
+  connection?: {
+    isLive: boolean;
+    source: 'live' | 'mock' | 'public_profile_fallback';
+    message: string;
+    checkedAt: string;
+  };
   account?: {
     power?: number;
     skillPoints?: number;
@@ -79,6 +85,13 @@ function ipfsToHttp(url?: string) {
 function getFactoryImage(symbol?: string) {
   if (!symbol) return '';
   return factoryImages[symbol.toUpperCase()] || '';
+}
+
+function connectionLabel(connection?: HomeData['connection']) {
+  if (!connection) return 'Unknown connection';
+  if (connection.source === 'live') return 'Live Craft World data';
+  if (connection.source === 'public_profile_fallback') return 'Public profile fallback';
+  return 'Development mock data';
 }
 
 export default function MyHome() {
@@ -145,9 +158,8 @@ export default function MyHome() {
   const proficiencies = home.proficiencies || [];
   const currencies = home.currencies || [];
   const wallets = walletData?.wallets || [];
-  const isCraftWorldConnected = Boolean(
-    account.walletAddress || dynos.length || factories.length || inventory.length || vaults.length || workshop.length || currencies.length,
-  );
+  const connection = home.connection;
+  const isCraftWorldConnected = Boolean(connection?.isLive);
   const lastSynced = home.lastSyncedAt ? new Date(home.lastSyncedAt).toLocaleString() : 'Not connected';
 
   const plotDisplayOrder = ['EARTH_PLOT', 'WATER_PLOT', 'FIRE_PLOT', 'BLUEPRINT_PLOT'];
@@ -185,6 +197,22 @@ export default function MyHome() {
         </Card>
 
         {error && <Card>{error}</Card>}
+
+        <Card title="Craft World Connection">
+          <div className="space-y-2">
+            <div className={`inline-flex rounded-full px-3 py-1 text-sm font-bold ${connection?.isLive ? 'bg-emerald-400 text-slate-950' : 'bg-yellow-400 text-slate-950'}`}>
+              {connectionLabel(connection)}
+            </div>
+            <p className={connection?.isLive ? 'text-sm text-emerald-300' : 'text-sm text-yellow-200'}>
+              {connection?.message || 'The app has not reported whether this data is live yet.'}
+            </p>
+            {!connection?.isLive && (
+              <p className="text-sm text-slate-300">
+                Treat the numbers below as incomplete until wallet login returns protected Craft World account data.
+              </p>
+            )}
+          </div>
+        </Card>
 
         <Card title="Connect Craft World Identity">
           <div className="space-y-3">
@@ -239,16 +267,6 @@ export default function MyHome() {
               {isCraftWorldConnected
                 ? 'No authenticated Craft World wallets are available for this account yet.'
                 : 'Connect live Craft World data to load authenticated wallet details.'}
-            </EmptyState>
-          )}
-        </Card>
-
-        <Card title="Craft World Connection">
-          {isCraftWorldConnected ? (
-            <p className="text-sm text-emerald-300">Live Craft World data is connected.</p>
-          ) : (
-            <EmptyState>
-              Craft World account data is not connected yet. Add CRAFTWORLD_AUTH_TOKEN in the server environment to sync live player data.
             </EmptyState>
           )}
         </Card>
@@ -395,8 +413,7 @@ export default function MyHome() {
               </div>
             ))
           ) : (
-            <EmptyState>No currencies found yet.</EmptyState>
-          )}
+            <EmptyState>No currencies found yet.</EmptyState>}
         </Card>
       </div>
     </Layout>
