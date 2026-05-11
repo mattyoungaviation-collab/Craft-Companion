@@ -13,6 +13,7 @@ export const getCraftworldHome = () => req('/api/craftworld/home') as Promise<Cr
 export const getCraftworldProfile = () => req('/api/craftworld/profile') as Promise<CraftworldProfile>;
 export const getCraftworldWallets = () => req('/api/craftworld/wallets') as Promise<{wallets:CraftworldWallet[];primaryWalletAddress?:string;lastSyncedAt:string}>;
 export const getCraftworldQuote = (body:{inputSymbol:string;outputSymbol?:string;inputAmount:number}) => req('/api/craftworld/quote',{method:'POST',body:JSON.stringify(body)}) as Promise<{type:string;input:{symbol:string;amount:number};output:{symbol:string;amount:number};details?:{priceImpactPercentage?:number}}>;
+export const getCraftworldBuyQuote = (body:{inputSymbol?:string;outputSymbol:string;outputAmount:number}) => req('/api/craftworld/buy-quote',{method:'POST',body:JSON.stringify(body)}) as Promise<{type:string;input:{symbol:string;amount:number};output:{symbol:string;amount:number};details?:{priceImpactPercentage?:number}}>;
 export const getCraftworldAuthPayload = (body:{address:string;chainId?:string}) => req('/api/auth/craftworld-wallet/payload',{method:'POST',body:JSON.stringify(body)}) as Promise<{payload:any}>;
 export const finishCraftworldAuthLogin = (body:{payload:any;signature:string}) => req('/api/craftworld/auth/login',{method:'POST',body:JSON.stringify(body)}) as Promise<{uid:string;walletAddress:string;expiresAt:string;isNewUser:boolean}>;
 export const logout = () => { localStorage.removeItem('token'); localStorage.removeItem('me'); };
