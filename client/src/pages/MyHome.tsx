@@ -413,7 +413,8 @@ export default function MyHome() {
               </div>
             ))
           ) : (
-            <EmptyState>No currencies found yet.</EmptyState>}
+            <EmptyState>No currencies found yet.</EmptyState>
+          )}
         </Card>
       </div>
     </Layout>
