@@ -49,7 +49,7 @@ async function graphqlRequest<T>(query: string, variables: Record<string, unknow
     Accept: '*/*',
     Origin: 'https://craft-world.gg',
     Referer: 'https://craft-world.gg/',
-    'x-app-version': process.env.CRAFTWORLD_APP_VERSION || '1.10.1',
+    'x-app-version': process.env.CRAFTWORLD_APP_VERSION || '1.11.0',
   };
 
   if (normalizedToken) headers.Authorization = `Bearer ${normalizedToken}`;
