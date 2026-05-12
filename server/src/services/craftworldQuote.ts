@@ -34,7 +34,7 @@ function craftWorldHeaders(token?: string) {
     Accept: '*/*',
     Origin: 'https://craft-world.gg',
     Referer: 'https://craft-world.gg/',
-    'x-app-version': process.env.CRAFTWORLD_APP_VERSION || '1.10.1',
+    'x-app-version': process.env.CRAFTWORLD_APP_VERSION || '1.11.0',
     ...(normalizedToken ? { Authorization: `Bearer ${normalizedToken}` } : {}),
   };
 }
