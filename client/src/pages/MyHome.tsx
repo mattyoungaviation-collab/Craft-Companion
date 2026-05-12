@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import Card from '../components/Card';
 import Layout from '../components/Layout';
 import {
-  getCraftworldHome,
+  getCraftworldSnapshotHome,
   getCraftworldProfile,
   getCraftworldWallets,
   getMe,
   updateCraftworldIdentity,
+  saveManualCraftworldModifiers,
 } from '../services/api';
 
 type ResourceAmount = { symbol?: string; amount?: number };
@@ -39,6 +40,7 @@ type WalletData = {
 };
 
 type HomeData = {
+  source?: 'authenticated' | 'public-uid' | 'mock';
   lastSyncedAt?: string;
   account?: {
     power?: number;
@@ -94,13 +96,17 @@ export default function MyHome() {
   const [craftWorldUidInput, setCraftWorldUidInput] = useState('');
   const [error, setError] = useState('');
   const [identityMessage, setIdentityMessage] = useState('');
+  const [manualWorkshopRows, setManualWorkshopRows] = useState<WorkshopItem[]>([{ symbol: '', level: 0 }]);
+  const [manualProficiencyRows, setManualProficiencyRows] = useState<ProficiencyItem[]>([{ symbol: '', claimedLevel: 0, collectedAmount: 0 }]);
 
   const load = async () => {
     setError('');
     try {
-      const [meData, homeData] = await Promise.all([getMe(), getCraftworldHome()]);
+      const [meData, homeData] = await Promise.all([getMe(), getCraftworldSnapshotHome()]);
       setMe(meData);
       setHome(homeData || {});
+      setManualWorkshopRows((homeData?.workshop?.length ? homeData.workshop : [{ symbol: '', level: 0 }]) as WorkshopItem[]);
+      setManualProficiencyRows((homeData?.proficiencies?.length ? homeData.proficiencies : [{ symbol: '', claimedLevel: 0, collectedAmount: 0 }]) as ProficiencyItem[]);
       setCraftWorldUidInput(meData.craftWorldUid || meData.craftWorldUserId || '');
 
       const uid = meData.craftWorldUid || meData.craftWorldUserId;
@@ -132,6 +138,17 @@ export default function MyHome() {
       await load();
     } catch {
       setError('Unable to save Craft World UID.');
+    }
+  };
+
+
+  const saveManualModifiers = async () => {
+    setError('');
+    try {
+      await saveManualCraftworldModifiers({ workshop: manualWorkshopRows, proficiencies: manualProficiencyRows });
+      await load();
+    } catch {
+      setError('Unable to save manual workshop/proficiencies.');
     }
   };
 
@@ -248,6 +265,36 @@ export default function MyHome() {
             </EmptyState>
           )}
         </Card>
+
+
+        {(home.source === 'public-uid' || !workshop.length || !proficiencies.length) && (
+          <Card title="Manual Workshop & Proficiencies">
+            <div className="space-y-4 text-sm">
+              <div className="space-y-2">
+                <p className="font-semibold">Workshop (symbol, level)</p>
+                {manualWorkshopRows.map((row, index) => (
+                  <div key={`workshop-${index}`} className="grid gap-2 md:grid-cols-2">
+                    <input value={row.symbol || ''} onChange={(event)=>setManualWorkshopRows((current)=>current.map((item,i)=>i===index?{...item,symbol:event.target.value}:item))} placeholder="symbol" className="rounded border border-slate-700 bg-slate-950 px-3 py-2"/>
+                    <input type="number" value={row.level || 0} onChange={(event)=>setManualWorkshopRows((current)=>current.map((item,i)=>i===index?{...item,level:Number(event.target.value||0)}:item))} placeholder="level" className="rounded border border-slate-700 bg-slate-950 px-3 py-2"/>
+                  </div>
+                ))}
+                <button onClick={()=>setManualWorkshopRows((current)=>([...current,{symbol:'',level:0}]))} className="rounded bg-slate-700 px-3 py-1">Add workshop row</button>
+              </div>
+              <div className="space-y-2">
+                <p className="font-semibold">Proficiencies (symbol, claimedLevel, collectedAmount optional)</p>
+                {manualProficiencyRows.map((row, index) => (
+                  <div key={`prof-${index}`} className="grid gap-2 md:grid-cols-3">
+                    <input value={row.symbol || ''} onChange={(event)=>setManualProficiencyRows((current)=>current.map((item,i)=>i===index?{...item,symbol:event.target.value}:item))} placeholder="symbol" className="rounded border border-slate-700 bg-slate-950 px-3 py-2"/>
+                    <input type="number" value={row.claimedLevel || 0} onChange={(event)=>setManualProficiencyRows((current)=>current.map((item,i)=>i===index?{...item,claimedLevel:Number(event.target.value||0)}:item))} placeholder="claimedLevel" className="rounded border border-slate-700 bg-slate-950 px-3 py-2"/>
+                    <input type="number" value={row.collectedAmount || 0} onChange={(event)=>setManualProficiencyRows((current)=>current.map((item,i)=>i===index?{...item,collectedAmount:Number(event.target.value||0)}:item))} placeholder="collectedAmount (optional)" className="rounded border border-slate-700 bg-slate-950 px-3 py-2"/>
+                  </div>
+                ))}
+                <button onClick={()=>setManualProficiencyRows((current)=>([...current,{symbol:'',claimedLevel:0,collectedAmount:0}]))} className="rounded bg-slate-700 px-3 py-1">Add proficiency row</button>
+              </div>
+              <button onClick={saveManualModifiers} className="rounded bg-blue-600 px-3 py-2 font-semibold">Save manual modifiers</button>
+            </div>
+          </Card>
+        )}
 
         <Card title="Craft World Connection">
           {isCraftWorldConnected ? (

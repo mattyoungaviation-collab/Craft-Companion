@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Card from '../components/Card';
 import Layout from '../components/Layout';
-import { getCraftworldBuyQuote, getCraftworldHome, getCraftworldQuote } from '../services/api';
+import { getCraftworldBuyQuote, getCraftworldSnapshotHome, getCraftworldQuote } from '../services/api';
 import { getActiveFactoryBoostPercent, getRunsPerHourWithFactoryBoosts, type FactoryBoost } from '../services/factoryBoostModifiers';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
 import { applyMasteryInputReduction, getMasteryInputReductionPercent, getMasteryLevel, type ProficiencyItem } from '../services/masteryModifiers';
@@ -147,7 +147,7 @@ export default function Profitability() {
       setError('');
 
       try {
-        const [factoryRows, homeData] = await Promise.all([loadFactoryData(), getCraftworldHome()]);
+        const [factoryRows, homeData] = await Promise.all([loadFactoryData(), getCraftworldSnapshotHome()]);
         setRows(factoryRows);
         setOwnedFactories(homeData.factories || []);
         setWorkshop(homeData.workshop || []);
