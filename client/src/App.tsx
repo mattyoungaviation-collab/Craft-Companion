@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
+import Calculator from './pages/Calculator';
 import CreateAccount from './pages/CreateAccount';
 import InventoryValue from './pages/InventoryValue';
 import Landing from './pages/Landing';
@@ -29,6 +30,14 @@ export default function App() {
           element={(
             <ProtectedRoute>
               <Profitability />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/calculator"
+          element={(
+            <ProtectedRoute>
+              <Calculator />
             </ProtectedRoute>
           )}
         />
