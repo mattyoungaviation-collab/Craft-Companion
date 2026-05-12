@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import Card from '../components/Card';
 import Layout from '../components/Layout';
 import { getCraftworldBuyQuote, getCraftworldHome, getCraftworldQuote } from '../services/api';
+import { getActiveFactoryBoostPercent, getRunsPerHourWithFactoryBoosts, type FactoryBoost } from '../services/factoryBoostModifiers';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
 import { applyMasteryInputReduction, getMasteryInputReductionPercent, getMasteryLevel, type ProficiencyItem } from '../services/masteryModifiers';
-import { getRunsPerHourWithWorkshop, getWorkshopSpeedBoostPercent, type WorkshopItem } from '../services/workshopModifiers';
+import { applyWorkshopSpeedToDuration, getWorkshopSpeedBoostPercent, type WorkshopItem } from '../services/workshopModifiers';
 
 type OwnedFactory = {
   id?: string;
@@ -12,7 +13,7 @@ type OwnedFactory = {
   level?: number;
   landPlotName?: string;
   currentRunLevel?: number;
-  activeBoosts?: { boostValue?: number }[];
+  activeBoosts?: FactoryBoost[];
 };
 
 type OwnedFactoryOption = {
@@ -52,6 +53,7 @@ type ProfitAdvisorRow = {
   profitPerHour: number;
   runsPerHour: number;
   workshopBoostPercent: number;
+  activeBoostPercent: number;
   masteryLevel: number;
   masteryReductionPercent: number;
   missingQuote: boolean;
@@ -79,6 +81,11 @@ function buyQuoteKey(symbol: string, amount: number) {
 
 function getAdjustedInputAmount(factoryToken: string, amount: number, proficiencies: ProficiencyItem[]) {
   return Math.ceil(applyMasteryInputReduction(amount, factoryToken, proficiencies));
+}
+
+function getRunsPerHourWithAllSpeed(row: FactoryDataRow, option: OwnedFactoryOption, workshop: WorkshopItem[]) {
+  const workshopDuration = applyWorkshopSpeedToDuration(row.duration_min, row.token, workshop);
+  return getRunsPerHourWithFactoryBoosts(workshopDuration, option.factory.activeBoosts || []);
 }
 
 function getRecipeQuoteRequests(row: FactoryDataRow, proficiencies: ProficiencyItem[]) {
@@ -290,7 +297,7 @@ export default function Profitability() {
         const outputValue = outputQuote?.output.amount || 0;
         const inputCost = (input1Quote?.output.amount || 0) + (input2Quote?.output.amount || 0);
         const profitPerRun = outputValue - inputCost;
-        const runsPerHour = getRunsPerHourWithWorkshop(row.duration_min, row.token, workshop);
+        const runsPerHour = getRunsPerHourWithAllSpeed(row, option, workshop);
         const profitPerHour = profitPerRun * runsPerHour;
         const impacts = [outputQuote, input1Quote, input2Quote]
           .map((quote) => quote?.details?.priceImpactPercentage || 0)
@@ -305,6 +312,7 @@ export default function Profitability() {
           profitPerHour,
           runsPerHour,
           workshopBoostPercent: getWorkshopSpeedBoostPercent(row.token, workshop),
+          activeBoostPercent: getActiveFactoryBoostPercent(option.factory.activeBoosts || []),
           masteryLevel: getMasteryLevel(row.token, proficiencies),
           masteryReductionPercent: getMasteryInputReductionPercent(row.token, proficiencies),
           missingQuote: !outputQuote || !input1Quote || Boolean(row.input_token_2 && !input2Quote),
@@ -325,13 +333,14 @@ export default function Profitability() {
   const input2Quote = selectedRow?.input_token_2 ? getSellQuote(selectedRow.input_token_2, selectedInput2AdjustedAmount) : null;
   const upgradeQuote = selectedUpgradeRow?.upgrade_token ? getBuyQuote(selectedUpgradeRow.upgrade_token, selectedUpgradeRow.upgrade_amount) : null;
   const selectedWorkshopBoostPercent = selectedRow ? getWorkshopSpeedBoostPercent(selectedRow.token, workshop) : 0;
+  const selectedActiveBoostPercent = selectedFactory ? getActiveFactoryBoostPercent(selectedFactory.factory.activeBoosts || []) : 0;
   const selectedMasteryLevel = selectedRow ? getMasteryLevel(selectedRow.token, proficiencies) : 0;
   const selectedMasteryReductionPercent = selectedRow ? getMasteryInputReductionPercent(selectedRow.token, proficiencies) : 0;
 
   const inputCost = (input1Quote?.output.amount || 0) + (input2Quote?.output.amount || 0);
   const outputValue = outputQuote?.output.amount || 0;
   const profitPerRun = outputValue - inputCost;
-  const runsPerHour = selectedRow ? getRunsPerHourWithWorkshop(selectedRow.duration_min, selectedRow.token, workshop) : 0;
+  const runsPerHour = selectedRow && selectedFactory ? getRunsPerHourWithAllSpeed(selectedRow, selectedFactory, workshop) : 0;
   const profitPerHour = profitPerRun * runsPerHour;
   const upgradeCost = upgradeQuote?.input.amount || 0;
 
@@ -349,7 +358,7 @@ export default function Profitability() {
         <Card title="Profit Advisor">
           <div className="space-y-3">
             <p className="text-sm text-slate-300">
-              This ranks every owned factory that matches the CSV by estimated COIN profit per hour using live Craft World quotes, workshop speed boosts, and factory resource mastery input reductions.
+              This ranks every owned factory that matches the CSV by estimated COIN profit per hour using live Craft World quotes, workshop speed boosts, active boosts, and factory resource mastery input reductions.
             </p>
             {quoteLoading && (
               <p className="text-sm text-slate-400">
@@ -366,6 +375,7 @@ export default function Profitability() {
                 <p className="font-semibold text-emerald-200">Best visible craft right now</p>
                 <p>{formatFactoryLabel(bestAdvisorRow.option)}</p>
                 <p>Workshop speed boost: {formatNumber(bestAdvisorRow.workshopBoostPercent, 2)}%</p>
+                <p>Active boost: {formatNumber(bestAdvisorRow.activeBoostPercent, 2)}%</p>
                 <p>Mastery: Lv {bestAdvisorRow.masteryLevel} / {formatNumber(bestAdvisorRow.masteryReductionPercent, 2)}% {bestAdvisorRow.row.token}</p>
                 <p>Estimated profit per hour: {formatNumber(bestAdvisorRow.profitPerHour)} COIN</p>
                 <p>Estimated profit per run: {formatNumber(bestAdvisorRow.profitPerRun)} COIN</p>
@@ -379,12 +389,13 @@ export default function Profitability() {
         {advisorRows.length > 0 && (
           <Card title="All Matched Factories Ranked">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] text-left text-sm">
+              <table className="w-full min-w-[1040px] text-left text-sm">
                 <thead className="text-slate-300">
                   <tr>
                     <th className="p-2">Rank</th>
                     <th className="p-2">Factory</th>
                     <th className="p-2">Workshop</th>
+                    <th className="p-2">Active Boost</th>
                     <th className="p-2">Mastery</th>
                     <th className="p-2">Profit Per Hour</th>
                     <th className="p-2">Profit Per Run</th>
@@ -400,6 +411,7 @@ export default function Profitability() {
                       <td className="p-2">{index + 1}</td>
                       <td className="p-2">{formatFactoryLabel(advisorRow.option)}</td>
                       <td className="p-2">{formatNumber(advisorRow.workshopBoostPercent, 2)}%</td>
+                      <td className="p-2">{formatNumber(advisorRow.activeBoostPercent, 2)}%</td>
                       <td className="p-2">Lv {advisorRow.masteryLevel} / {formatNumber(advisorRow.masteryReductionPercent, 2)}% {advisorRow.row.token}</td>
                       <td className={advisorRow.profitPerHour >= 0 ? 'p-2 text-emerald-300' : 'p-2 text-red-300'}>
                         {advisorRow.missingQuote ? 'Waiting' : `${formatNumber(advisorRow.profitPerHour)} COIN`}
@@ -428,7 +440,7 @@ export default function Profitability() {
               Output value uses the sell quote: output token to COIN. Input costs use the selected factory resource mastery to reduce each input amount, then quote those reduced inputs to COIN.
             </p>
             <p className="text-sm text-yellow-200">
-              Upgrade requirement uses the next CSV level row. Profit per hour includes your workshop speed boost for the factory resource.
+              Upgrade requirement uses the next CSV level row. Profit per hour includes workshop speed and active factory boosts.
             </p>
 
             {error && <p className="text-sm text-red-300">{error}</p>}
@@ -475,6 +487,7 @@ export default function Profitability() {
                 <p>CSV Level: {selectedRow.level}</p>
                 <p>Original Duration: {formatNumber(selectedRow.duration_min, 2)} min</p>
                 <p>Workshop Speed Boost: {formatNumber(selectedWorkshopBoostPercent, 2)}%</p>
+                <p>Active Boost: {formatNumber(selectedActiveBoostPercent, 2)}%</p>
                 <p>Mastery: Lv {selectedMasteryLevel} / {formatNumber(selectedMasteryReductionPercent, 2)}% {selectedRow.token}</p>
                 <p>Output: {formatNumber(selectedRow.output_amount)} {selectedRow.output_token}</p>
                 <p>Input 1: {formatNumber(selectedRow.input_amount_1)} → {formatNumber(selectedInput1AdjustedAmount)} {selectedRow.input_token_1}</p>
