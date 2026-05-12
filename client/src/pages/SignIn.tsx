@@ -47,10 +47,10 @@ async function getWalletConnectProvider() {
     },
     showQrModal: true,
     metadata: {
-      name: 'Craftworld Companion',
-      description: 'Craftworld Companion wallet sign in',
-      url: window.location.origin,
-      icons: [`${window.location.origin}/favicon.ico`],
+      name: 'Craft World Companion',
+      description: 'Official Craft World account authentication',
+      url: 'https://craft-world.gg',
+      icons: ['https://craft-world.gg/favicon.ico'],
     },
   });
 
@@ -68,20 +68,27 @@ export default function SignIn() {
   const completeCraftWorldWalletLogin = async (provider: WalletProvider, label: string) => {
     setE('');
     setWalletStatus(`Requesting ${label} connection...`);
+
     const accounts = await provider.request({ method: 'eth_requestAccounts' });
     const address = accounts?.[0];
-    if (!address) throw new Error('No wallet address was returned.');
 
-    setWalletStatus('Preparing Craft World login payload...');
+    if (!address) {
+      throw new Error('No wallet address was returned.');
+    }
+
+    setWalletStatus('Requesting official Craft World authentication payload...');
+
     const craftWorldPayload = await getCraftworldAuthPayload({ address });
 
-    setWalletStatus('Please sign the Craft World nonce.');
+    setWalletStatus('Please sign the official Craft World login message.');
+
     const craftWorldSignature = await provider.request({
       method: 'personal_sign',
-      params: [craftWorldPayload.payload.nonce, address],
+      params: [craftWorldPayload.payload.message, address],
     });
 
-    setWalletStatus('Connecting Craft World account...');
+    setWalletStatus('Authenticating with Craft World...');
+
     await craftWorldWalletLogin({
       payload: craftWorldPayload.payload,
       signature: craftWorldSignature,
@@ -93,7 +100,9 @@ export default function SignIn() {
   const signInWithRoninWallet = async () => {
     setE('');
     setWalletStatus('');
+
     const provider = getInjectedWalletProvider();
+
     if (!provider) {
       setE('Ronin Wallet was not detected. Install Ronin Wallet or open this app in a wallet enabled browser.');
       return;
@@ -124,20 +133,32 @@ export default function SignIn() {
     <div className="mx-auto mt-12 max-w-md space-y-6">
       <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
         <h1 className="mb-3 text-xl font-semibold">Sign In</h1>
+
         <div className="space-y-3">
-          <button type="button" onClick={signInWithRoninWallet} className="w-full rounded bg-blue-600 p-2 font-semibold">
+          <button
+            type="button"
+            onClick={signInWithRoninWallet}
+            className="w-full rounded bg-blue-600 p-2 font-semibold"
+          >
             Connect Ronin Wallet
           </button>
-          <button type="button" onClick={signInWithWalletConnect} className="w-full rounded bg-slate-700 p-2 font-semibold">
+
+          <button
+            type="button"
+            onClick={signInWithWalletConnect}
+            className="w-full rounded bg-slate-700 p-2 font-semibold"
+          >
             Connect with WalletConnect
           </button>
         </div>
+
         {walletStatus && <p className="mt-2 text-sm text-slate-300">{walletStatus}</p>}
       </div>
 
       <form
         onSubmit={async (ev) => {
           ev.preventDefault();
+
           try {
             await login({ username, password });
             nav('/home');
@@ -147,8 +168,17 @@ export default function SignIn() {
         }}
         className="space-y-3 rounded-xl border border-slate-700 bg-slate-900 p-4"
       >
-        <h2 className="text-sm font-semibold text-slate-300">Or use username and password</h2>
-        <input className="w-full rounded border border-slate-700 bg-slate-950 p-2" placeholder="Username" value={username} onChange={(e) => setU(e.target.value)} />
+        <h2 className="text-sm font-semibold text-slate-300">
+          Or use username and password
+        </h2>
+
+        <input
+          className="w-full rounded border border-slate-700 bg-slate-950 p-2"
+          placeholder="Username"
+          value={username}
+          onChange={(e) => setU(e.target.value)}
+        />
+
         <input
           type="password"
           className="w-full rounded border border-slate-700 bg-slate-950 p-2"
@@ -156,7 +186,10 @@ export default function SignIn() {
           value={password}
           onChange={(e) => setP(e.target.value)}
         />
-        <button className="w-full rounded bg-slate-700 p-2">Sign In</button>
+
+        <button className="w-full rounded bg-slate-700 p-2">
+          Sign In
+        </button>
       </form>
 
       {e && <p className="text-red-400">{e}</p>}
