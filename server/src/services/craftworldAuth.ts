@@ -3,6 +3,7 @@ import { CraftworldAccountIdentity } from '../types.js';
 const craftWorldBaseUrl = process.env.CRAFTWORLD_BASE_URL || 'https://craft-world.gg';
 const craftWorldGraphqlUrl = process.env.CRAFTWORLD_GRAPHQL_ENDPOINT || `${craftWorldBaseUrl}/graphql`;
 const firebaseApiKey = process.env.CRAFTWORLD_FIREBASE_API_KEY;
+const roninChainId = process.env.CRAFTWORLD_CHAIN_ID || '2020';
 
 function craftWorldHeaders(extra: Record<string, string> = {}) {
   return {
@@ -26,6 +27,17 @@ function normalizeCraftworldToken(token?: string) {
   if (value.startsWith('jwt_')) return value;
   if (value.split('.').length >= 3) return `jwt_${value}`;
   return value;
+}
+
+function buildCraftworldSignInMessage(walletAddress: string, nonce: string) {
+  const issuedAt = new Date();
+  const expiresAt = new Date(issuedAt.getTime() + 15 * 60 * 1000);
+
+  return {
+    message: `craft-world.gg wants you to sign in with your Ethereum account:\n${walletAddress}\n\nBy signing this message, you are authenticating your wallet with the game and agreeing to the Terms & Conditions.\n\nURI: https://craft-world.gg\nVersion: 1\nChain ID: ${roninChainId}\nNonce: ${nonce}\nIssued At: ${issuedAt.toISOString()}\nExpiration Time: ${expiresAt.toISOString()}`,
+    issuedAt: issuedAt.toISOString(),
+    expirationTime: expiresAt.toISOString(),
+  };
 }
 
 async function readJson<T>(res: Response): Promise<T> {
@@ -55,7 +67,7 @@ async function craftworldGraphql<T>(query: string, variables?: Record<string, un
   return raw.data as T;
 }
 
-export async function requestCraftworldAuthPayload(address: string): Promise<{ walletAddress: string; nonce: string }> {
+export async function requestCraftworldAuthPayload(address: string): Promise<{ walletAddress: string; nonce: string; message: string; issuedAt: string; expirationTime: string }> {
   const query = `
     query($walletAddress: String!) {
       getNonce(walletAddress: $walletAddress) { nonce }
@@ -66,7 +78,8 @@ export async function requestCraftworldAuthPayload(address: string): Promise<{ w
   const noncePayload = data.getNonce;
   const nonce = typeof noncePayload === 'string' ? noncePayload : noncePayload?.nonce;
   if (!nonce) throw new Error('Craft World nonce was not returned.');
-  return { walletAddress: address, nonce };
+  const signInMessage = buildCraftworldSignInMessage(address, nonce);
+  return { walletAddress: address, nonce, ...signInMessage };
 }
 
 export async function loginCraftworldWithSignedPayload(payload: any, signature: string): Promise<{ customToken: string; uid: string }> {
