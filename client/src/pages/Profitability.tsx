@@ -71,16 +71,20 @@ function formatFactoryLabel(option: OwnedFactoryOption) {
   return `${option.plotName} • ${option.symbol} • Lv ${option.displayLevel}${craftLevel}`;
 }
 
+function normalizeQuoteAmount(amount: number) {
+  return Number(amount.toFixed(8));
+}
+
 function sellQuoteKey(symbol: string, amount: number) {
-  return `SELL-${symbol.toUpperCase()}-${amount}`;
+  return `SELL-${symbol.toUpperCase()}-${normalizeQuoteAmount(amount)}`;
 }
 
 function buyQuoteKey(symbol: string, amount: number) {
-  return `BUY-COIN-${symbol.toUpperCase()}-${amount}`;
+  return `BUY-COIN-${symbol.toUpperCase()}-${normalizeQuoteAmount(amount)}`;
 }
 
 function getAdjustedInputAmount(factoryToken: string, amount: number, proficiencies: ProficiencyItem[]) {
-  return Math.ceil(applyMasteryInputReduction(amount, factoryToken, proficiencies));
+  return normalizeQuoteAmount(applyMasteryInputReduction(amount, factoryToken, proficiencies));
 }
 
 function getRunsPerHourWithAllSpeed(row: FactoryDataRow, option: OwnedFactoryOption, workshop: WorkshopItem[]) {
