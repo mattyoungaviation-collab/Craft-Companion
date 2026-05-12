@@ -33,12 +33,12 @@ export function applyFactoryBoostsToDuration(durationMinutes: number, boosts: Fa
   if (!Number.isFinite(duration) || duration <= 0) return duration;
 
   const boostPercent = getActiveFactoryBoostPercent(boosts);
-  if (boostPercent >= 100) return 0;
-  return duration * (1 - boostPercent / 100);
+  if (boostPercent <= 0) return duration;
+
+  return duration / (1 + boostPercent / 100);
 }
 
 export function getRunsPerHourWithFactoryBoosts(durationMinutes: number, boosts: FactoryBoost[] = []) {
   const adjustedDuration = applyFactoryBoostsToDuration(durationMinutes, boosts);
-  if (adjustedDuration === 0) return Number.POSITIVE_INFINITY;
-  return adjustedDuration > 0 ? 60 / adjustedDuration : 0;
+  return adjustedDuration > 0 && Number.isFinite(adjustedDuration) ? 60 / adjustedDuration : 0;
 }
