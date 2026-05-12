@@ -48,9 +48,9 @@ async function getWalletConnectProvider() {
     showQrModal: true,
     metadata: {
       name: 'Craft World Companion',
-      description: 'Official Craft World account authentication',
-      url: 'https://craft-world.gg',
-      icons: ['https://craft-world.gg/favicon.ico'],
+      description: 'Craft World account dashboard',
+      url: window.location.origin,
+      icons: [`${window.location.origin}/favicon.ico`],
     },
   });
 
@@ -76,15 +76,15 @@ export default function SignIn() {
       throw new Error('No wallet address was returned.');
     }
 
-    setWalletStatus('Requesting official Craft World authentication payload...');
+    setWalletStatus('Requesting Craft World authentication payload...');
 
     const craftWorldPayload = await getCraftworldAuthPayload({ address });
 
-    setWalletStatus('Please sign the official Craft World login message.');
+    setWalletStatus('Please sign the Craft World login message.');
 
     const craftWorldSignature = await provider.request({
       method: 'personal_sign',
-      params: [craftWorldPayload.payload.message, address],
+      params: [craftWorldPayload.payload.nonce, address],
     });
 
     setWalletStatus('Authenticating with Craft World...');
