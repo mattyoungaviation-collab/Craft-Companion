@@ -96,12 +96,12 @@ function getRecipeQuoteRequests(row: FactoryDataRow, proficiencies: ProficiencyI
   const input1Amount = getAdjustedInputAmount(row.token, row.input_amount_1, proficiencies);
   const requests: QuoteRequest[] = [
     { type: 'sell', symbol: row.output_token, amount: row.output_amount, key: sellQuoteKey(row.output_token, row.output_amount) },
-    { type: 'sell', symbol: row.input_token_1, amount: input1Amount, key: sellQuoteKey(row.input_token_1, input1Amount) },
+    { type: 'buy', symbol: row.input_token_1, amount: input1Amount, key: buyQuoteKey(row.input_token_1, input1Amount) },
   ];
 
   if (row.input_token_2 && row.input_amount_2 > 0) {
     const input2Amount = getAdjustedInputAmount(row.token, row.input_amount_2, proficiencies);
-    requests.push({ type: 'sell', symbol: row.input_token_2, amount: input2Amount, key: sellQuoteKey(row.input_token_2, input2Amount) });
+    requests.push({ type: 'buy', symbol: row.input_token_2, amount: input2Amount, key: buyQuoteKey(row.input_token_2, input2Amount) });
   }
 
   return requests;
@@ -296,10 +296,10 @@ export default function Profitability() {
         const input1AdjustedAmount = getAdjustedInputAmount(row.token, row.input_amount_1, proficiencies);
         const input2AdjustedAmount = row.input_token_2 ? getAdjustedInputAmount(row.token, row.input_amount_2, proficiencies) : 0;
         const outputQuote = getSellQuote(row.output_token, row.output_amount);
-        const input1Quote = getSellQuote(row.input_token_1, input1AdjustedAmount);
-        const input2Quote = row.input_token_2 ? getSellQuote(row.input_token_2, input2AdjustedAmount) : null;
+        const input1Quote = getBuyQuote(row.input_token_1, input1AdjustedAmount);
+        const input2Quote = row.input_token_2 ? getBuyQuote(row.input_token_2, input2AdjustedAmount) : null;
         const outputValue = outputQuote?.output.amount || 0;
-        const inputCost = (input1Quote?.output.amount || 0) + (input2Quote?.output.amount || 0);
+        const inputCost = (input1Quote?.input.amount || 0) + (input2Quote?.input.amount || 0);
         const profitPerRun = outputValue - inputCost;
         const runsPerHour = getRunsPerHourWithAllSpeed(row, option, workshop);
         const profitPerHour = profitPerRun * runsPerHour;
@@ -333,15 +333,15 @@ export default function Profitability() {
   const selectedInput1AdjustedAmount = selectedRow ? getAdjustedInputAmount(selectedRow.token, selectedRow.input_amount_1, proficiencies) : 0;
   const selectedInput2AdjustedAmount = selectedRow?.input_token_2 ? getAdjustedInputAmount(selectedRow.token, selectedRow.input_amount_2, proficiencies) : 0;
   const outputQuote = selectedRow ? getSellQuote(selectedRow.output_token, selectedRow.output_amount) : null;
-  const input1Quote = selectedRow ? getSellQuote(selectedRow.input_token_1, selectedInput1AdjustedAmount) : null;
-  const input2Quote = selectedRow?.input_token_2 ? getSellQuote(selectedRow.input_token_2, selectedInput2AdjustedAmount) : null;
+  const input1Quote = selectedRow ? getBuyQuote(selectedRow.input_token_1, selectedInput1AdjustedAmount) : null;
+  const input2Quote = selectedRow?.input_token_2 ? getBuyQuote(selectedRow.input_token_2, selectedInput2AdjustedAmount) : null;
   const upgradeQuote = selectedUpgradeRow?.upgrade_token ? getBuyQuote(selectedUpgradeRow.upgrade_token, selectedUpgradeRow.upgrade_amount) : null;
   const selectedWorkshopBoostPercent = selectedRow ? getWorkshopSpeedBoostPercent(selectedRow.token, workshop) : 0;
   const selectedActiveBoostPercent = selectedFactory ? getActiveFactoryBoostPercent(selectedFactory.factory.activeBoosts || []) : 0;
   const selectedMasteryLevel = selectedRow ? getMasteryLevel(selectedRow.token, proficiencies) : 0;
   const selectedMasteryReductionPercent = selectedRow ? getMasteryInputReductionPercent(selectedRow.token, proficiencies) : 0;
 
-  const inputCost = (input1Quote?.output.amount || 0) + (input2Quote?.output.amount || 0);
+  const inputCost = (input1Quote?.input.amount || 0) + (input2Quote?.input.amount || 0);
   const outputValue = outputQuote?.output.amount || 0;
   const profitPerRun = outputValue - inputCost;
   const runsPerHour = selectedRow && selectedFactory ? getRunsPerHourWithAllSpeed(selectedRow, selectedFactory, workshop) : 0;
@@ -362,7 +362,7 @@ export default function Profitability() {
         <Card title="Profit Advisor">
           <div className="space-y-3">
             <p className="text-sm text-slate-300">
-              This ranks every owned factory that matches the CSV by estimated COIN profit per hour using live Craft World quotes, workshop speed boosts, active boosts, and factory resource mastery input reductions.
+              This ranks every owned factory that matches the CSV by estimated COIN profit per hour using live Craft World sell quotes for outputs, buy quotes for inputs, workshop speed boosts, active boosts, and factory resource mastery input reductions.
             </p>
             {quoteLoading && (
               <p className="text-sm text-slate-400">
@@ -403,8 +403,8 @@ export default function Profitability() {
                     <th className="p-2">Mastery</th>
                     <th className="p-2">Profit Per Hour</th>
                     <th className="p-2">Profit Per Run</th>
-                    <th className="p-2">Input Value</th>
-                    <th className="p-2">Output Value</th>
+                    <th className="p-2">Input Buy Cost</th>
+                    <th className="p-2">Output Sell Value</th>
                     <th className="p-2">Impact</th>
                     <th className="p-2">Status</th>
                   </tr>
@@ -441,7 +441,7 @@ export default function Profitability() {
               Select one of your live Craft World factories. The calculator matches your owned factory level to the uploaded factory CSV.
             </p>
             <p className="text-sm text-yellow-200">
-              Output value uses the sell quote: output token to COIN. Input costs use the selected factory resource mastery to reduce each input amount, then quote those reduced inputs to COIN.
+              Output value uses the sell quote: output resource to COIN. Input costs use buy quotes: COIN to the selected factory resource inputs after mastery reduction.
             </p>
             <p className="text-sm text-yellow-200">
               Upgrade requirement uses the next CSV level row. Profit per hour includes workshop speed and active factory boosts.
@@ -504,15 +504,15 @@ export default function Profitability() {
               <div className="space-y-2 text-sm">
                 {quoteLoading && <p className="text-slate-400">Loading Craft World quotes...</p>}
                 <QuoteLine label="Output Sell Value" quote={outputQuote} />
-                <QuoteLine label="Input 1 Value After Mastery" quote={input1Quote} />
-                {selectedRow.input_token_2 && <QuoteLine label="Input 2 Value After Mastery" quote={input2Quote} />}
+                <QuoteLine label="Input 1 Buy Cost After Mastery" quote={input1Quote} />
+                {selectedRow.input_token_2 && <QuoteLine label="Input 2 Buy Cost After Mastery" quote={input2Quote} />}
                 {selectedUpgradeRow?.upgrade_token && <QuoteLine label="Upgrade Buy Cost" quote={upgradeQuote} />}
               </div>
             </Card>
 
             <Card title="Results">
               <div className="grid gap-2 text-sm md:grid-cols-2">
-                <p>Input Value After Mastery: {formatNumber(inputCost)} COIN</p>
+                <p>Input Buy Cost After Mastery: {formatNumber(inputCost)} COIN</p>
                 <p>Output Sell Value: {formatNumber(outputValue)} COIN</p>
                 <p>Profit Per Run: {formatNumber(profitPerRun)} COIN</p>
                 <p>Profit Per Hour: {formatNumber(profitPerHour)} COIN</p>
