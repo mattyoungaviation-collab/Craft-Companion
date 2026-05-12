@@ -9,6 +9,7 @@ export default function Layout({ children }: { children: any }) {
         <div className="space-x-4">
           <Link to="/home">My Home</Link>
           <Link to="/profitability">Profitability</Link>
+          <Link to="/calculator">Calculator</Link>
           <Link to="/inventory-value">Inventory Value</Link>
           <Link to="/upgrade-advisor">Upgrade Advisor</Link>
           <Link to="/matrix">Matrix</Link>
