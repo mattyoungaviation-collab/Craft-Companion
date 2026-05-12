@@ -2,17 +2,19 @@ import { useEffect, useMemo, useState } from 'react';
 import Card from '../components/Card';
 import Layout from '../components/Layout';
 import { getCraftworldBuyQuote, getCraftworldHome, getCraftworldQuote } from '../services/api';
+import { getActiveFactoryBoostPercent, getRunsPerHourWithFactoryBoosts, type FactoryBoost } from '../services/factoryBoostModifiers';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
 import { applyMasteryInputReduction, getMasteryInputReductionPercent, getMasteryLevel, type ProficiencyItem } from '../services/masteryModifiers';
-import { getRunsPerHourWithWorkshop, getWorkshopSpeedBoostPercent, type WorkshopItem } from '../services/workshopModifiers';
+import { applyWorkshopSpeedToDuration, getWorkshopSpeedBoostPercent, type WorkshopItem } from '../services/workshopModifiers';
 
-type OwnedFactory = { id?: string; areaSymbol?: string; level?: number; landPlotName?: string };
+type OwnedFactory = { id?: string; areaSymbol?: string; level?: number; landPlotName?: string; activeBoosts?: FactoryBoost[] };
 type ResourceAmount = { symbol?: string; amount?: number };
 type Quote = { input: { symbol: string; amount: number }; output: { symbol: string; amount: number }; details?: { priceImpactPercentage?: number } };
 type QuoteMap = Record<string, Quote | null>;
 
 type FactoryOption = {
   key: string;
+  factory: OwnedFactory;
   symbol: string;
   plotName: string;
   level: number;
@@ -35,6 +37,7 @@ type AdvisorRow = {
   currentProfitPerHour: number;
   nextProfitPerHour: number;
   workshopBoostPercent: number;
+  activeBoostPercent: number;
   currentMasteryText: string;
   nextMasteryText: string;
   breakEvenHours: number;
@@ -77,7 +80,7 @@ function inventoryMap(items: ResourceAmount[]) {
 }
 
 function adjustedInputAmount(factoryToken: string, amount: number, proficiencies: ProficiencyItem[]) {
-  return applyMasteryInputReduction(amount, factoryToken, proficiencies);
+  return Math.ceil(applyMasteryInputReduction(amount, factoryToken, proficiencies));
 }
 
 function masteryText(row: FactoryDataRow, proficiencies: ProficiencyItem[]) {
@@ -100,7 +103,7 @@ function recipeRequests(row: FactoryDataRow | null | undefined, proficiencies: P
   return requests;
 }
 
-function recipeProfitPerHour(row: FactoryDataRow, quotes: QuoteMap, workshop: WorkshopItem[], proficiencies: ProficiencyItem[]) {
+function recipeProfitPerHour(row: FactoryDataRow, quotes: QuoteMap, workshop: WorkshopItem[], activeBoosts: FactoryBoost[], proficiencies: ProficiencyItem[]) {
   const input1Amount = adjustedInputAmount(row.token, row.input_amount_1, proficiencies);
   const input2Amount = row.input_token_2 ? adjustedInputAmount(row.token, row.input_amount_2, proficiencies) : 0;
   const output = quotes[sellKey(row.output_token, row.output_amount)] || null;
@@ -111,7 +114,8 @@ function recipeProfitPerHour(row: FactoryDataRow, quotes: QuoteMap, workshop: Wo
 
   const inputCost = input1.output.amount + (input2?.output.amount || 0);
   const profitPerRun = output.output.amount - inputCost;
-  const runsPerHour = getRunsPerHourWithWorkshop(row.duration_min, row.token, workshop);
+  const workshopDuration = applyWorkshopSpeedToDuration(row.duration_min, row.token, workshop);
+  const runsPerHour = getRunsPerHourWithFactoryBoosts(workshopDuration, activeBoosts);
   const impact = Math.max(
     output.details?.priceImpactPercentage || 0,
     input1.details?.priceImpactPercentage || 0,
@@ -181,6 +185,7 @@ export default function UpgradeAdvisor() {
         if (!symbol || !currentRow || !nextRow) return null;
         return {
           key: factory.id || `${factory.landPlotName || 'plot'}-${symbol}-${level}-${index}`,
+          factory,
           symbol,
           plotName: factory.landPlotName || 'Unknown plot',
           level,
@@ -262,8 +267,9 @@ export default function UpgradeAdvisor() {
 
   const advisorRows = useMemo<AdvisorRow[]>(() => {
     return options.map((option) => {
-      const current = recipeProfitPerHour(option.currentRow, quotes, workshop, proficiencies);
-      const next = recipeProfitPerHour(option.nextRow, quotes, workshop, proficiencies);
+      const activeBoosts = option.factory.activeBoosts || [];
+      const current = recipeProfitPerHour(option.currentRow, quotes, workshop, activeBoosts, proficiencies);
+      const next = recipeProfitPerHour(option.nextRow, quotes, workshop, activeBoosts, proficiencies);
       const needToken = option.nextRow.upgrade_token;
       const needAmount = option.nextRow.upgrade_amount;
       const ownAmount = inventory[needToken] || 0;
@@ -293,6 +299,7 @@ export default function UpgradeAdvisor() {
         currentProfitPerHour: current.value,
         nextProfitPerHour: next.value,
         workshopBoostPercent: getWorkshopSpeedBoostPercent(option.symbol, workshop),
+        activeBoostPercent: getActiveFactoryBoostPercent(activeBoosts),
         currentMasteryText: masteryText(option.currentRow, proficiencies),
         nextMasteryText: masteryText(option.nextRow, proficiencies),
         breakEvenHours,
@@ -321,7 +328,7 @@ export default function UpgradeAdvisor() {
         <Card title="Upgrade Advisor">
           <div className="space-y-3">
             <p className="text-sm text-slate-300">
-              This shows the material needed for the next upgrade, what you already own, what you are missing, and whether buying or crafting the missing amount is cheaper. Workshop speed boosts and factory resource mastery input reductions are included.
+              This shows the material needed for the next upgrade, what you already own, what you are missing, and whether buying or crafting the missing amount is cheaper. Workshop speed, active boosts, and factory resource mastery are included.
             </p>
             {quoteLoading && <p className="text-sm text-slate-400">Loading prices... {quotedCount}/{quoteRequests.length} quotes checked.</p>}
             {error && <p className="text-sm text-red-300">{error}</p>}
@@ -330,6 +337,7 @@ export default function UpgradeAdvisor() {
                 <p className="font-semibold text-emerald-200">Best upgrade candidate</p>
                 <p>{rowLabel(bestUpgrade.option)}</p>
                 <p>Workshop speed boost: {fmt(bestUpgrade.workshopBoostPercent, 2)}%</p>
+                <p>Active boost: {fmt(bestUpgrade.activeBoostPercent, 2)}%</p>
                 <p>Current recipe mastery: {bestUpgrade.currentMasteryText}</p>
                 <p>Next recipe mastery: {bestUpgrade.nextMasteryText}</p>
                 <p>Need: {fmt(bestUpgrade.needAmount)} {bestUpgrade.needToken}</p>
@@ -349,12 +357,13 @@ export default function UpgradeAdvisor() {
         <Card title="All Upgrade Candidates">
           {advisorRows.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1420px] text-left text-sm">
+              <table className="w-full min-w-[1480px] text-left text-sm">
                 <thead className="text-slate-300">
                   <tr>
                     <th className="p-2">Rank</th>
                     <th className="p-2">Factory</th>
                     <th className="p-2">Workshop</th>
+                    <th className="p-2">Active Boost</th>
                     <th className="p-2">Mastery</th>
                     <th className="p-2">Need</th>
                     <th className="p-2">Own</th>
@@ -376,6 +385,7 @@ export default function UpgradeAdvisor() {
                       <td className="p-2">{index + 1}</td>
                       <td className="p-2">{rowLabel(row.option)}</td>
                       <td className="p-2">{fmt(row.workshopBoostPercent, 2)}%</td>
+                      <td className="p-2">{fmt(row.activeBoostPercent, 2)}%</td>
                       <td className="p-2">{row.currentMasteryText} → {row.nextMasteryText}</td>
                       <td className="p-2">{fmt(row.needAmount)} {row.needToken}</td>
                       <td className="p-2">{fmt(row.ownAmount)} {row.needToken}</td>
