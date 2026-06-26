@@ -1,47 +1,7 @@
 import { CraftworldHomeData, CraftworldProfile, CraftworldWallet, Me } from '../types';
-
-function getApiBaseUrl() {
-  const configured = String(import.meta.env.VITE_API_BASE_URL || '').trim();
-  if (configured) return configured.replace(/\/$/, '');
-
-  if (typeof window !== 'undefined') {
-    const { hostname } = window.location;
-
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:3001';
-    }
-  }
-
-  return '';
-}
-
-const API = getApiBaseUrl();
+const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 const token = () => localStorage.getItem('token');
-
-async function req(path: string, init: RequestInit = {}) {
-  const r = await fetch(`${API}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token() ? { Authorization: `Bearer ${token()}` } : {}),
-      ...(init.headers || {}),
-    },
-  });
-
-  if (!r.ok) {
-    let message = 'Request failed';
-    try {
-      const body = await r.json();
-      message = body?.message || message;
-    } catch {
-      message = `${r.status} ${r.statusText}`;
-    }
-    throw new Error(message);
-  }
-
-  return r.json();
-}
-
+async function req(path:string, init:RequestInit={}) { const r = await fetch(`${API}${path}`, { ...init, headers: { 'Content-Type':'application/json', ...(token()?{Authorization:`Bearer ${token()}`}:{}) } }); if(!r.ok) throw new Error((await r.json()).message||'Request failed'); return r.json(); }
 export const registerAccount = (body:{craftWorldUserId:string;username:string;password:string}) => req('/api/auth/register',{method:'POST',body:JSON.stringify(body)});
 export const login = async(body:{username:string;password:string}) => { const d=await req('/api/auth/login',{method:'POST',body:JSON.stringify(body)}); localStorage.setItem('token', d.token); if (d.user) localStorage.setItem('me', JSON.stringify(d.user)); return d; };
 export const craftWorldWalletLogin = async(body:{payload:any;signature:string}) => { const d=await req('/api/auth/craftworld-wallet/login',{method:'POST',body:JSON.stringify(body)}); localStorage.setItem('token', d.token); localStorage.setItem('me', JSON.stringify(d.user)); return d; };
