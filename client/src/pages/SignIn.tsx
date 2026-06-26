@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EthereumProvider from '@walletconnect/ethereum-provider';
 import {
@@ -28,6 +28,8 @@ type WalletProvider = {
 const RONIN_CHAIN_ID = 2020;
 const RONIN_RPC_URL = 'https://api.roninchain.com/rpc';
 
+let walletConnectProviderPromise: Promise<WalletProvider> | null = null;
+
 function getInjectedWalletProvider() {
   return window.ronin?.provider || window.ethereum;
 }
@@ -38,69 +40,83 @@ async function getWalletConnectProvider() {
     throw new Error('WalletConnect is not configured. Add VITE_WALLETCONNECT_PROJECT_ID to your environment.');
   }
 
-  const provider = await EthereumProvider.init({
-    projectId,
-    chains: [RONIN_CHAIN_ID],
-    optionalChains: [RONIN_CHAIN_ID],
-    rpcMap: {
-      [RONIN_CHAIN_ID]: RONIN_RPC_URL,
-    },
-    showQrModal: true,
-    metadata: {
-      name: 'Craft World Companion',
-      description: 'Craft World account dashboard',
-      url: window.location.origin,
-      icons: [`${window.location.origin}/favicon.ico`],
-    },
-  });
+  if (!walletConnectProviderPromise) {
+    walletConnectProviderPromise = EthereumProvider.init({
+      projectId,
+      chains: [RONIN_CHAIN_ID],
+      optionalChains: [RONIN_CHAIN_ID],
+      rpcMap: {
+        [RONIN_CHAIN_ID]: RONIN_RPC_URL,
+      },
+      showQrModal: true,
+      metadata: {
+        name: 'Craft World Companion',
+        description: 'Craft World account dashboard',
+        url: window.location.origin,
+        icons: [`${window.location.origin}/favicon.ico`],
+      },
+    }).then((provider) => provider as WalletProvider);
+  }
 
-  await provider.connect();
-  return provider as WalletProvider;
+  const provider = await walletConnectProviderPromise;
+  await provider.request({ method: 'eth_requestAccounts' });
+  return provider;
 }
 
 export default function SignIn() {
   const nav = useNavigate();
+  const walletLoginInFlight = useRef(false);
+  const passwordLoginInFlight = useRef(false);
   const [username, setU] = useState('');
   const [password, setP] = useState('');
   const [e, setE] = useState('');
   const [walletStatus, setWalletStatus] = useState('');
+  const [isWalletBusy, setIsWalletBusy] = useState(false);
+  const [isPasswordBusy, setIsPasswordBusy] = useState(false);
 
   const completeCraftWorldWalletLogin = async (provider: WalletProvider, label: string) => {
+    if (walletLoginInFlight.current) return;
+    walletLoginInFlight.current = true;
+    setIsWalletBusy(true);
     setE('');
-    setWalletStatus(`Requesting ${label} connection...`);
 
-    const accounts = await provider.request({ method: 'eth_requestAccounts' });
-    const address = accounts?.[0];
+    try {
+      setWalletStatus(`Requesting ${label} connection...`);
 
-    if (!address) {
-      throw new Error('No wallet address was returned.');
+      const accounts = await provider.request({ method: 'eth_requestAccounts' });
+      const address = accounts?.[0];
+
+      if (!address) {
+        throw new Error('No wallet address was returned.');
+      }
+
+      setWalletStatus('Requesting Craft World authentication payload...');
+
+      const craftWorldPayload = await getCraftworldAuthPayload({ address });
+
+      setWalletStatus('Please sign the Craft World login message.');
+
+      const craftWorldSignature = await provider.request({
+        method: 'personal_sign',
+        params: [craftWorldPayload.payload.nonce, address],
+      });
+
+      setWalletStatus('Authenticating with Craft World...');
+
+      await craftWorldWalletLogin({
+        payload: craftWorldPayload.payload,
+        signature: craftWorldSignature,
+      });
+
+      nav('/home');
+    } finally {
+      walletLoginInFlight.current = false;
+      setIsWalletBusy(false);
+      setWalletStatus('');
     }
-
-    setWalletStatus('Requesting Craft World authentication payload...');
-
-    const craftWorldPayload = await getCraftworldAuthPayload({ address });
-
-    setWalletStatus('Please sign the Craft World login message.');
-
-    const craftWorldSignature = await provider.request({
-      method: 'personal_sign',
-      params: [craftWorldPayload.payload.nonce, address],
-    });
-
-    setWalletStatus('Authenticating with Craft World...');
-
-    await craftWorldWalletLogin({
-      payload: craftWorldPayload.payload,
-      signature: craftWorldSignature,
-    });
-
-    nav('/home');
   };
 
   const signInWithRoninWallet = async () => {
-    setE('');
-    setWalletStatus('');
-
     const provider = getInjectedWalletProvider();
 
     if (!provider) {
@@ -111,19 +127,16 @@ export default function SignIn() {
     try {
       await completeCraftWorldWalletLogin(provider, 'Ronin Wallet');
     } catch (err: any) {
-      setWalletStatus('');
       setE(err.message || 'Ronin Wallet sign in failed.');
     }
   };
 
   const signInWithWalletConnect = async () => {
-    setE('');
-    setWalletStatus('');
-
     try {
       const provider = await getWalletConnectProvider();
       await completeCraftWorldWalletLogin(provider, 'WalletConnect');
     } catch (err: any) {
+      walletConnectProviderPromise = null;
       setWalletStatus('');
       setE(err.message || 'WalletConnect sign in failed.');
     }
@@ -138,17 +151,19 @@ export default function SignIn() {
           <button
             type="button"
             onClick={signInWithRoninWallet}
-            className="w-full rounded bg-blue-600 p-2 font-semibold"
+            disabled={isWalletBusy}
+            className="w-full rounded bg-blue-600 p-2 font-semibold disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Connect Ronin Wallet
+            {isWalletBusy ? 'Connecting...' : 'Connect Ronin Wallet'}
           </button>
 
           <button
             type="button"
             onClick={signInWithWalletConnect}
-            className="w-full rounded bg-slate-700 p-2 font-semibold"
+            disabled={isWalletBusy}
+            className="w-full rounded bg-slate-700 p-2 font-semibold disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Connect with WalletConnect
+            {isWalletBusy ? 'Connecting...' : 'Connect with WalletConnect'}
           </button>
         </div>
 
@@ -158,12 +173,19 @@ export default function SignIn() {
       <form
         onSubmit={async (ev) => {
           ev.preventDefault();
+          if (passwordLoginInFlight.current) return;
+          passwordLoginInFlight.current = true;
+          setIsPasswordBusy(true);
+          setE('');
 
           try {
             await login({ username, password });
             nav('/home');
           } catch (err: any) {
             setE(err.message);
+          } finally {
+            passwordLoginInFlight.current = false;
+            setIsPasswordBusy(false);
           }
         }}
         className="space-y-3 rounded-xl border border-slate-700 bg-slate-900 p-4"
@@ -187,8 +209,11 @@ export default function SignIn() {
           onChange={(e) => setP(e.target.value)}
         />
 
-        <button className="w-full rounded bg-slate-700 p-2">
-          Sign In
+        <button
+          disabled={isPasswordBusy}
+          className="w-full rounded bg-slate-700 p-2 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isPasswordBusy ? 'Signing in...' : 'Sign In'}
         </button>
       </form>
 
