@@ -126,6 +126,15 @@ export async function getCraftworldAccountIdentity(idToken?: string, fallbackWal
     query AccountIdentity {
       account {
         id
+        linkedAccounts {
+          type
+          details {
+            id
+            user_id
+            provider_id
+            authProviderId
+          }
+        }
         wallets {
           address
           type
@@ -140,6 +149,15 @@ export async function getCraftworldAccountIdentity(idToken?: string, fallbackWal
   const data = await craftworldGraphql<{
     account?: {
       id?: string;
+      linkedAccounts?: Array<{
+        type?: string;
+        details?: {
+          id?: string;
+          user_id?: string;
+          provider_id?: string;
+          authProviderId?: string;
+        };
+      }>;
       wallets?: Array<{ address?: string; type?: string; provider?: string | null; providerId?: string | null; primary?: boolean }>;
     };
   }>(query, undefined, idToken);
@@ -147,9 +165,11 @@ export async function getCraftworldAccountIdentity(idToken?: string, fallbackWal
   if (!accountId) return null;
 
   const wallets = Array.isArray(data.account?.wallets) ? data.account?.wallets || [] : [];
+  const linkedAccounts = Array.isArray(data.account?.linkedAccounts) ? data.account?.linkedAccounts || [] : [];
 
   return {
     id: accountId,
+    linkedAccounts,
     wallets: wallets.length ? wallets : fallbackWalletAddress ? [{ address: fallbackWalletAddress }] : [],
   };
 }
