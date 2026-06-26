@@ -1,24 +1,18 @@
 import { CraftworldHomeData, CraftworldProfile, CraftworldWallet, Me } from '../types';
 
-const DEPLOYED_API_BASE_URL = 'https://craft-companion.onrender.com';
-
 function getApiBaseUrl() {
   const configured = String(import.meta.env.VITE_API_BASE_URL || '').trim();
   if (configured) return configured.replace(/\/$/, '');
 
   if (typeof window !== 'undefined') {
-    const { origin, hostname } = window.location;
+    const { hostname } = window.location;
 
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return 'http://localhost:3001';
     }
-
-    if (origin === 'https://craft-companion-1hxp.onrender.com') {
-      return DEPLOYED_API_BASE_URL;
-    }
   }
 
-  return DEPLOYED_API_BASE_URL;
+  return '';
 }
 
 const API = getApiBaseUrl();
