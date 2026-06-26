@@ -1,5 +1,9 @@
 import { CraftworldHomeData, CraftworldProfile, CraftworldWallet, Me } from '../types';
-const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+const API =
+  import.meta.env.VITE_API_BASE_URL ||
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3001'
+    : '');
 const token = () => localStorage.getItem('token');
 async function req(path:string, init:RequestInit={}) { const r = await fetch(`${API}${path}`, { ...init, headers: { 'Content-Type':'application/json', ...(token()?{Authorization:`Bearer ${token()}`}:{}) } }); if(!r.ok) throw new Error((await r.json()).message||'Request failed'); return r.json(); }
 export const registerAccount = (body:{craftWorldUserId:string;username:string;password:string}) => req('/api/auth/register',{method:'POST',body:JSON.stringify(body)});
