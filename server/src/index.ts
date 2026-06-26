@@ -15,7 +15,30 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const clientDistPath = path.resolve(__dirname, '../../client/dist');
 
-app.use(cors());
+const allowedOrigins = new Set([
+  'https://craft-companion.onrender.com',
+  'https://craft-companion-1hxp.onrender.com',
+  'http://localhost:5173',
+  'http://localhost:3001',
+]);
+
+const corsOptions: cors.CorsOptions = {
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS blocked origin: ${origin}`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 
 const auth = (req: any, res: any, next: any) => {
