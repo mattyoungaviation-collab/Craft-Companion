@@ -120,10 +120,12 @@ authRouter.post('/craftworld-wallet/login', async (req, res) => {
     const account = await getCraftworldAccountIdentity(firebaseAuth.idToken, payload.walletAddress || payload.address || '');
 
     const craftWorldAccountId = String(account?.id || '').trim();
-    const craftWorldUid = getCustomJwtUserId(account, firebaseAccount.localId);
+    const firebaseLocalId = String(firebaseAccount.localId || '').trim();
+    const linkedUid = getCustomJwtUserId(account, '');
+    const craftWorldUid = linkedUid || (firebaseLocalId && !isWalletAddress(firebaseLocalId) ? firebaseLocalId : craftWorldAccountId);
     const walletAddress = getPrimaryWalletAddress(account, payload.walletAddress || payload.address || '');
 
-    if (!craftWorldUid || isWalletAddress(craftWorldUid)) {
+    if (!craftWorldUid) {
       console.error('Craft World UID was not available', {
         craftWorldAccountId,
         craftWorldUid,
@@ -148,7 +150,7 @@ authRouter.post('/craftworld-wallet/login', async (req, res) => {
       (item) =>
         item.craftWorldUid === craftWorldUid ||
         item.craftWorldUserId === craftWorldUid ||
-        item.craftWorldFirebaseUserId === craftWorldUid ||
+        item.craftWorldFirebaseUserId === firebaseLocalId ||
         item.craftWorldAccountId === craftWorldAccountId ||
         Boolean(walletAddress && item.walletAddress?.toLowerCase() === walletAddress),
     );
@@ -161,7 +163,7 @@ authRouter.post('/craftworld-wallet/login', async (req, res) => {
         username: `wallet-${walletAddress.slice(2, 8) || 'craft'}`,
         craftWorldUserId: craftWorldUid,
         craftWorldUid: craftWorldUid,
-        craftWorldFirebaseUserId: craftWorldUid,
+        craftWorldFirebaseUserId: firebaseLocalId || craftWorldUid,
         craftWorldAccountId: craftWorldAccountId,
         walletAddress,
         passwordHash: '',
@@ -172,7 +174,7 @@ authRouter.post('/craftworld-wallet/login', async (req, res) => {
 
     user.craftWorldUid = craftWorldUid;
     user.craftWorldUserId = craftWorldUid;
-    user.craftWorldFirebaseUserId = craftWorldUid;
+    user.craftWorldFirebaseUserId = firebaseLocalId || craftWorldUid;
     user.craftWorldAccountId = craftWorldAccountId;
     user.walletAddress = walletAddress;
     user.craftWorldCustomToken = craftWorldAuth.customToken;
