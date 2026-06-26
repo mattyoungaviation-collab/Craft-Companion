@@ -28,41 +28,21 @@ function normalizeCraftworldToken(token?: string) {
   return value;
 }
 
-function getResponseErrorMessage(raw: any, fallback: string) {
-  return (
-    raw?.message ||
-    raw?.error?.message ||
-    raw?.error_description ||
-    raw?.errors?.[0]?.message ||
-    fallback
-  );
-}
-
-async function readJson<T>(res: Response, context = 'Craft World auth request'): Promise<T> {
+async function readJson<T>(res: Response): Promise<T> {
   const text = await res.text();
   let raw: any;
   try {
     raw = text ? JSON.parse(text) : {};
   } catch {
-    const preview = text.slice(0, 240).replace(/\s+/g, ' ');
-    throw new Error(`${context} expected JSON from ${res.url}, received: ${preview}`);
+    const preview = text.slice(0, 120).replace(/\s+/g, ' ');
+    throw new Error(`Expected JSON from ${res.url}, received: ${preview}`);
   }
 
-  if (!res.ok) {
-    const message = getResponseErrorMessage(raw, `${context} failed.`);
-    console.error(`${context} failed`, {
-      status: res.status,
-      statusText: res.statusText,
-      url: res.url,
-      body: raw,
-    });
-    throw new Error(`${context} failed: ${message}`);
-  }
-
+  if (!res.ok) throw new Error(raw?.message || raw?.error?.message || 'Craft World auth request failed.');
   return raw as T;
 }
 
-async function craftworldGraphql<T>(query: string, variables?: Record<string, unknown>, bearerToken?: string, context = 'Craft World GraphQL'): Promise<T> {
+async function craftworldGraphql<T>(query: string, variables?: Record<string, unknown>, bearerToken?: string): Promise<T> {
   const token = normalizeCraftworldToken(bearerToken);
   const res = await fetch(craftWorldGraphqlUrl, {
     method: 'POST',
@@ -70,14 +50,8 @@ async function craftworldGraphql<T>(query: string, variables?: Record<string, un
     body: JSON.stringify({ query, ...(variables ? { variables } : {}) }),
   });
 
-  const raw = await readJson<any>(res, context);
-  if (raw.errors?.length) {
-    console.error(`${context} errors`, {
-      errors: raw.errors,
-      variables,
-    });
-    throw new Error(`${context} failed: ${raw.errors[0]?.message || 'GraphQL error.'}`);
-  }
+  const raw = await readJson<any>(res);
+  if (raw.errors?.length) throw new Error(raw.errors[0]?.message || 'Craft World GraphQL error.');
   return raw.data as T;
 }
 
@@ -88,12 +62,7 @@ export async function requestCraftworldAuthPayload(address: string): Promise<{ w
     }
   `;
 
-  const data = await craftworldGraphql<{ getNonce?: { nonce?: string } | string }>(
-    query,
-    { walletAddress: address },
-    undefined,
-    'Craft World nonce request',
-  );
+  const data = await craftworldGraphql<{ getNonce?: { nonce?: string } | string }>(query, { walletAddress: address });
   const noncePayload = data.getNonce;
   const nonce = typeof noncePayload === 'string' ? noncePayload : noncePayload?.nonce;
   if (!nonce) throw new Error('Craft World nonce was not returned.');
@@ -110,15 +79,10 @@ export async function loginCraftworldWithSignedPayload(payload: any, signature: 
     }
   `;
 
-  const data = await craftworldGraphql<{ loginForCustomToken?: { customToken?: string } | string }>(
-    mutation,
-    {
-      signature,
-      walletAddress,
-    },
-    undefined,
-    'Craft World custom token login',
-  );
+  const data = await craftworldGraphql<{ loginForCustomToken?: { customToken?: string } | string }>(mutation, {
+    signature,
+    walletAddress,
+  });
   const tokenPayload = data.loginForCustomToken;
   const customToken = typeof tokenPayload === 'string' ? tokenPayload : tokenPayload?.customToken;
   if (!customToken) throw new Error('Craft World custom token was not returned.');
@@ -139,7 +103,7 @@ export async function exchangeCraftworldCustomToken(customToken: string): Promis
     body: JSON.stringify({ token: customToken, returnSecureToken: true }),
   });
 
-  return readJson<{ idToken: string; refreshToken: string; expiresIn: string; isNewUser: boolean }>(res, 'Firebase custom token exchange');
+  return readJson<{ idToken: string; refreshToken: string; expiresIn: string; isNewUser: boolean }>(res);
 }
 
 export async function lookupCraftworldFirebaseAccount(idToken: string): Promise<{ localId?: string; lastLoginAt?: string; createdAt?: string }> {
@@ -151,7 +115,7 @@ export async function lookupCraftworldFirebaseAccount(idToken: string): Promise<
     body: JSON.stringify({ idToken }),
   });
 
-  const data = await readJson<{ users?: Array<{ localId?: string; lastLoginAt?: string; createdAt?: string }> }>(res, 'Firebase account lookup');
+  const data = await readJson<{ users?: Array<{ localId?: string; lastLoginAt?: string; createdAt?: string }> }>(res);
   return data.users?.[0] || {};
 }
 
@@ -162,15 +126,6 @@ export async function getCraftworldAccountIdentity(idToken?: string, fallbackWal
     query AccountIdentity {
       account {
         id
-        linkedAccounts {
-          type
-          details {
-            id
-            user_id
-            provider_id
-            authProviderId
-          }
-        }
         wallets {
           address
           type
@@ -185,27 +140,16 @@ export async function getCraftworldAccountIdentity(idToken?: string, fallbackWal
   const data = await craftworldGraphql<{
     account?: {
       id?: string;
-      linkedAccounts?: Array<{
-        type?: string;
-        details?: {
-          id?: string;
-          user_id?: string;
-          provider_id?: string;
-          authProviderId?: string;
-        };
-      }>;
       wallets?: Array<{ address?: string; type?: string; provider?: string | null; providerId?: string | null; primary?: boolean }>;
     };
-  }>(query, undefined, idToken, 'Craft World account identity lookup');
+  }>(query, undefined, idToken);
   const accountId = String(data.account?.id || '').trim();
   if (!accountId) return null;
 
   const wallets = Array.isArray(data.account?.wallets) ? data.account?.wallets || [] : [];
-  const linkedAccounts = Array.isArray(data.account?.linkedAccounts) ? data.account?.linkedAccounts || [] : [];
 
   return {
     id: accountId,
-    linkedAccounts,
     wallets: wallets.length ? wallets : fallbackWalletAddress ? [{ address: fallbackWalletAddress }] : [],
   };
 }
@@ -224,7 +168,7 @@ export async function refreshCraftworldIdToken(refreshToken: string): Promise<{
     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }),
   });
 
-  const data = await readJson<{ id_token: string; refresh_token: string; expires_in: string; user_id: string }>(res, 'Firebase token refresh');
+  const data = await readJson<{ id_token: string; refresh_token: string; expires_in: string; user_id: string }>(res);
   return {
     idToken: data.id_token,
     refreshToken: data.refresh_token,
