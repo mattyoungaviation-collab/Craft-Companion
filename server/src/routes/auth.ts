@@ -94,6 +94,11 @@ authRouter.post('/craftworld-wallet/payload', async (req, res) => {
     const payload = await requestCraftworldAuthPayload(String(address));
     return res.json({ payload });
   } catch (error: any) {
+    console.error('Craft World wallet payload failed', {
+      address,
+      message: error?.message,
+      stack: error?.stack,
+    });
     return res.status(502).json({ message: error.message || 'Unable to create Craft World auth payload.' });
   }
 });
@@ -101,6 +106,12 @@ authRouter.post('/craftworld-wallet/payload', async (req, res) => {
 authRouter.post('/craftworld-wallet/login', async (req, res) => {
   const { payload, signature } = req.body ?? {};
   if (!payload || !signature) return res.status(400).json({ message: 'Payload and signature are required.' });
+
+  console.log('Craft World wallet login attempt', {
+    walletAddress: payload?.walletAddress || payload?.address,
+    hasSignature: Boolean(signature),
+    noncePreview: String(payload?.nonce || '').slice(0, 80),
+  });
 
   try {
     const craftWorldAuth = await loginCraftworldWithSignedPayload(payload, String(signature));
@@ -113,6 +124,14 @@ authRouter.post('/craftworld-wallet/login', async (req, res) => {
     const walletAddress = getPrimaryWalletAddress(account, payload.walletAddress || payload.address || '');
 
     if (!craftWorldUid || isWalletAddress(craftWorldUid)) {
+      console.error('Craft World UID was not available', {
+        craftWorldAccountId,
+        craftWorldUid,
+        firebaseLocalId: firebaseAccount.localId,
+        craftWorldAuthUid: craftWorldAuth.uid,
+        walletAddress,
+        linkedAccounts: account?.linkedAccounts,
+      });
       return res.status(502).json({ message: 'Craft World UID was not available.' });
     }
 
@@ -165,6 +184,11 @@ authRouter.post('/craftworld-wallet/login', async (req, res) => {
 
     return res.json({ token: signAppToken(user), user: safeUser(user) });
   } catch (error: any) {
+    console.error('Craft World wallet login failed', {
+      walletAddress: payload?.walletAddress || payload?.address,
+      message: error?.message,
+      stack: error?.stack,
+    });
     return res.status(502).json({ message: error.message || 'Unable to complete Craft World auth login.' });
   }
 });
