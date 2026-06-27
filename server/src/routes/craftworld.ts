@@ -108,12 +108,28 @@ craftworldRouter.get('/profile', async (req: any, res) => {
   }
 });
 
-craftworldRouter.get('/wallets', async (_req, res) => {
+craftworldRouter.get('/wallets', async (req: any, res) => {
+  const { user, token } = await getCurrentUserAndFreshToken(req);
+
   try {
-    const wallets = await getCraftworldWallets();
+    const wallets = await getCraftworldWallets(token);
     res.json(wallets);
   } catch (error: any) {
-    res.status(502).json({ message: error.message || 'Unable to load Craft World wallets.' });
+    console.error('Craft World wallets failed, returning saved wallet fallback', {
+      userId: user?.id,
+      walletAddress: user?.walletAddress,
+      message: error?.message,
+    });
+
+    const fallbackWallet = user?.walletAddress
+      ? [{ address: user.walletAddress, primary: true, provider: 'saved', type: 'external' }]
+      : [];
+
+    res.json({
+      wallets: fallbackWallet,
+      primaryWalletAddress: user?.walletAddress,
+      lastSyncedAt: new Date().toISOString(),
+    });
   }
 });
 
