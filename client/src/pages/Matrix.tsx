@@ -49,6 +49,11 @@ const tokenOrder = [
   'ENERGY',
   'HYDROGEN',
   'DYNAMITE',
+  'BOLTS',
+  'KEY',
+  'CERAMICKEY',
+  'GLASSKEY',
+  'DYNOKEY',
 ];
 
 const API = import.meta.env.VITE_API_BASE_URL || (
@@ -156,7 +161,8 @@ export default function Matrix() {
       EARTH: available.filter((token) => ['MUD', 'CLAY', 'SAND', 'COPPER', 'STEEL', 'SCREWS'].includes(token)),
       WATER: available.filter((token) => ['SEAWATER', 'ALGAE', 'OXYGEN', 'GAS', 'FUEL', 'OIL'].includes(token)),
       FIRE: available.filter((token) => ['HEAT', 'LAVA', 'GLASS', 'SULFUR', 'FIBERGLASS'].includes(token)),
-      ADVANCED: available.filter((token) => !['MUD', 'CLAY', 'SAND', 'COPPER', 'STEEL', 'SCREWS', 'SEAWATER', 'ALGAE', 'OXYGEN', 'GAS', 'FUEL', 'OIL', 'HEAT', 'LAVA', 'GLASS', 'SULFUR', 'FIBERGLASS'].includes(token)),
+      ADVANCED: available.filter((token) => ['STEAM', 'CERAMICS', 'STONE', 'CEMENT', 'ACID', 'PLASTICS', 'ENERGY', 'HYDROGEN', 'DYNAMITE'].includes(token)),
+      KEYS: available.filter((token) => ['BOLTS', 'KEY', 'CERAMICKEY', 'GLASSKEY', 'DYNOKEY'].includes(token)),
     };
   }, [rows]);
 

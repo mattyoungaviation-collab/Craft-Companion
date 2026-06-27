@@ -9,6 +9,7 @@ const tokenOrder = [
   'SEAWATER', 'ALGAE', 'OXYGEN', 'GAS', 'FUEL', 'OIL',
   'HEAT', 'LAVA', 'GLASS', 'SULFUR', 'FIBERGLASS',
   'STEAM', 'CERAMICS', 'STONE', 'CEMENT', 'ACID', 'PLASTICS', 'ENERGY', 'HYDROGEN', 'DYNAMITE',
+  'BOLTS', 'KEY', 'CERAMICKEY', 'GLASSKEY', 'DYNOKEY',
 ];
 
 let started = false;
