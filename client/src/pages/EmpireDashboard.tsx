@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import Card from '../components/Card';
 import Layout from '../components/Layout';
 import { getCraftworldHome } from '../services/api';
-import { formatDurationFromMinutes, getDurationMinutesFromRunsPerHour } from '../services/durationFormat';
-import { getActiveFactoryBoostPercent, getRunsPerHourWithFactoryBoosts, type FactoryBoost } from '../services/factoryBoostModifiers';
+import { formatDurationFromMinutes } from '../services/durationFormat';
+import { type FactoryBoost } from '../services/factoryBoostModifiers';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
-import { applyWorkshopSpeedToDuration, getWorkshopSpeedBoostPercent, type WorkshopItem } from '../services/workshopModifiers';
+import { calculateFactoryCycle } from '../services/craftworldCalculations';
+import { type WorkshopItem } from '../services/workshopModifiers';
 
 type OwnedFactory = {
   id?: string;
@@ -63,13 +64,6 @@ function getFactoryRow(factoryRows: FactoryDataRow[], factory: OwnedFactory) {
   return factoryRows.find((row) => row.token === symbol && row.level === level) || null;
 }
 
-function productionPerHour(outputAmount: number, runsPerHour: number) {
-  const amount = Number(outputAmount || 0);
-  const runs = Number(runsPerHour || 0);
-  if (!Number.isFinite(amount) || !Number.isFinite(runs) || amount <= 0 || runs <= 0) return 0;
-  return amount * runs;
-}
-
 function buildProductionRows(factories: OwnedFactory[], factoryRows: FactoryDataRow[], workshop: WorkshopItem[]) {
   return factories
     .map((factory, index): FactoryProductionRow | null => {
@@ -77,10 +71,7 @@ function buildProductionRows(factories: OwnedFactory[], factoryRows: FactoryData
       const symbol = String(factory.areaSymbol || '').trim().toUpperCase();
       if (!row || !symbol) return null;
 
-      const workshopDuration = applyWorkshopSpeedToDuration(row.duration_min, row.token, workshop);
-      const runsPerHour = getRunsPerHourWithFactoryBoosts(workshopDuration, factory.activeBoosts || []);
-      const effectiveDurationMinutes = getDurationMinutesFromRunsPerHour(runsPerHour);
-      const perHour = productionPerHour(row.output_amount, runsPerHour);
+      const cycle = calculateFactoryCycle(row, {}, { workshop, activeBoosts: factory.activeBoosts || [] });
 
       return {
         key: factory.id || `${factory.landPlotName || 'plot'}-${symbol}-${row.level}-${index}`,
@@ -90,12 +81,12 @@ function buildProductionRows(factories: OwnedFactory[], factoryRows: FactoryData
         outputToken: row.output_token,
         outputAmount: row.output_amount,
         baseDurationMinutes: row.duration_min,
-        effectiveDurationMinutes,
-        runsPerHour,
-        outputPerHour: perHour,
-        outputPerDay: perHour * 24,
-        workshopBoostPercent: getWorkshopSpeedBoostPercent(row.token, workshop),
-        activeBoostPercent: getActiveFactoryBoostPercent(factory.activeBoosts || []),
+        effectiveDurationMinutes: cycle.runtimeMinutes,
+        runsPerHour: cycle.runsPerHour,
+        outputPerHour: cycle.outputPerHour,
+        outputPerDay: cycle.outputPerDay,
+        workshopBoostPercent: cycle.workshopBoostPercent,
+        activeBoostPercent: cycle.activeBoostPercent,
       };
     })
     .filter((value): value is FactoryProductionRow => Boolean(value))
@@ -123,8 +114,8 @@ function getBestBoostPlacement(rows: FactoryProductionRow[]) {
   return [...candidates].sort((a, b) => {
     const aBaseRunsPerHour = a.baseDurationMinutes > 0 ? 60 / a.baseDurationMinutes : 0;
     const bBaseRunsPerHour = b.baseDurationMinutes > 0 ? 60 / b.baseDurationMinutes : 0;
-    const aNaturalOutput = productionPerHour(a.outputAmount, aBaseRunsPerHour);
-    const bNaturalOutput = productionPerHour(b.outputAmount, bBaseRunsPerHour);
+    const aNaturalOutput = a.outputAmount * aBaseRunsPerHour;
+    const bNaturalOutput = b.outputAmount * bBaseRunsPerHour;
     return bNaturalOutput - aNaturalOutput;
   })[0];
 }
@@ -160,7 +151,7 @@ export default function EmpireDashboard() {
   const tokenTotals = useMemo(() => buildTokenTotals(productionRows), [productionRows]);
   const bestFactory = productionRows[0] || null;
   const bestBoostPlacement = useMemo(() => getBestBoostPlacement(productionRows), [productionRows]);
-  const activeBoostedFactories = productionRows.filter((row) => row.activeBoostPercent > 100).length;
+  const activeBoostedFactories = productionRows.filter((row) => row.activeBoostPercent > 0).length;
   const totalRunsPerHour = productionRows.reduce((total, row) => total + row.runsPerHour, 0);
   const lastSynced = home?.lastSyncedAt ? new Date(home.lastSyncedAt).toLocaleString() : 'Not connected';
 

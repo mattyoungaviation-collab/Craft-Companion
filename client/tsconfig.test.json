@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "dist-tests",
+    "rootDir": "src",
+    "noEmit": false
+  },
+  "include": [
+    "src/services/craftworldCalculations.ts",
+    "src/services/craftworldCalculations.test.ts",
+    "src/services/durationFormat.ts",
+    "src/services/factoryBoostModifiers.ts",
+    "src/services/masteryModifiers.ts",
+    "src/services/playerConfig.ts",
+    "src/services/priceHistory.ts",
+    "src/services/workshopModifiers.ts"
+  ],
+  "exclude": ["src/**/*.tsx"]
+}
