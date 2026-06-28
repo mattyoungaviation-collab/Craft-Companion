@@ -7,6 +7,7 @@ import Landing from './pages/Landing';
 import Matrix from './pages/Matrix';
 import MyHome from './pages/MyHome';
 import Profitability from './pages/Profitability';
+import ResourcePlanner from './pages/ResourcePlanner';
 import SignIn from './pages/SignIn';
 import UpgradeAdvisor from './pages/UpgradeAdvisor';
 
@@ -22,6 +23,14 @@ export default function App() {
           element={(
             <ProtectedRoute>
               <MyHome />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/resource-planner"
+          element={(
+            <ProtectedRoute>
+              <ResourcePlanner />
             </ProtectedRoute>
           )}
         />
