@@ -14,6 +14,8 @@ export default function Layout({ children }: { children: any }) {
           <Link to="/calculator">Calculator</Link>
           <Link to="/inventory-value">Inventory Value</Link>
           <Link to="/upgrade-advisor">Upgrade Advisor</Link>
+          <Link to="/compare">Compare</Link>
+          <Link to="/timers">Timers</Link>
           <Link to="/matrix">Matrix</Link>
           <Link to="/settings">Settings</Link>
           <button

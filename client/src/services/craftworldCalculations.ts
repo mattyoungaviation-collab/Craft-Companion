@@ -101,6 +101,23 @@ export type UpgradeRecommendation = {
   warning?: string;
 };
 
+export type CycleTimerInput = {
+  runtimeMinutes: number;
+  startedAt?: string | null;
+  pausedAt?: string | null;
+  now?: string | Date;
+};
+
+export type CycleTimerStatus = {
+  runtimeSeconds: number;
+  elapsedSeconds: number;
+  remainingSeconds: number;
+  completedCycles: number;
+  progressPercent: number;
+  requiresStartTime: boolean;
+  paused: boolean;
+};
+
 const HOURS_PER_DAY = 24;
 const MINUTES_PER_HOUR = 60;
 
@@ -331,6 +348,42 @@ export function calculateTimeUntilResources(targetAmount: number, currentAmount:
   if (missingAmount <= 0) return { missingAmount: 0, hours: 0, ready: true };
   const rate = finiteNumber(productionPerHour, 0);
   return { missingAmount, hours: rate > 0 ? missingAmount / rate : Number.POSITIVE_INFINITY, ready: false };
+}
+
+export function calculateCycleTimerStatus(input: CycleTimerInput): CycleTimerStatus {
+  const runtimeSeconds = Math.max(0, Math.round(finiteNumber(input.runtimeMinutes, 0) * 60));
+  const nowMs = input.now instanceof Date ? input.now.getTime() : new Date(input.now || new Date()).getTime();
+  const startedMs = input.startedAt ? new Date(input.startedAt).getTime() : 0;
+  const pausedMs = input.pausedAt ? new Date(input.pausedAt).getTime() : 0;
+  const effectiveNow = Number.isFinite(pausedMs) && pausedMs > 0 ? pausedMs : nowMs;
+
+  if (!runtimeSeconds || !Number.isFinite(startedMs) || startedMs <= 0) {
+    return {
+      runtimeSeconds,
+      elapsedSeconds: 0,
+      remainingSeconds: runtimeSeconds,
+      completedCycles: 0,
+      progressPercent: 0,
+      requiresStartTime: true,
+      paused: Boolean(input.pausedAt),
+    };
+  }
+
+  const elapsedSeconds = Math.max(0, Math.floor((effectiveNow - startedMs) / 1000));
+  const completedCycles = runtimeSeconds > 0 ? Math.floor(elapsedSeconds / runtimeSeconds) : 0;
+  const secondsIntoCycle = runtimeSeconds > 0 ? elapsedSeconds % runtimeSeconds : 0;
+  const remainingSeconds = runtimeSeconds > 0 ? Math.max(runtimeSeconds - secondsIntoCycle, 0) : 0;
+  const progressPercent = runtimeSeconds > 0 ? (secondsIntoCycle / runtimeSeconds) * 100 : 0;
+
+  return {
+    runtimeSeconds,
+    elapsedSeconds,
+    remainingSeconds,
+    completedCycles,
+    progressPercent,
+    requiresStartTime: false,
+    paused: Boolean(input.pausedAt),
+  };
 }
 
 export function buildRecipeTree(rows: FactoryDataRow[], token: string, amount = 1, level?: number, seen = new Set<string>()): RecipeNode {

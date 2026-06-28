@@ -3,6 +3,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Calculator from './pages/Calculator';
 import CreateAccount from './pages/CreateAccount';
 import EmpireDashboard from './pages/EmpireDashboard';
+import FactoryCompare from './pages/FactoryCompare';
+import FactoryTimers from './pages/FactoryTimers';
 import InventoryValue from './pages/InventoryValue';
 import Landing from './pages/Landing';
 import Matrix from './pages/Matrix';
@@ -81,6 +83,22 @@ export default function App() {
           element={(
             <ProtectedRoute>
               <Matrix />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/compare"
+          element={(
+            <ProtectedRoute>
+              <FactoryCompare />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/timers"
+          element={(
+            <ProtectedRoute>
+              <FactoryTimers />
             </ProtectedRoute>
           )}
         />
