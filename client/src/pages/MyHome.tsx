@@ -118,10 +118,17 @@ export default function MyHome() {
   const load = async () => {
     setError('');
     try {
-      const [meData, homeData, loadedFactoryRows] = await Promise.all([getMe(), getCraftworldHome(), loadFactoryData()]);
+const [meData, homeData] = await Promise.all([getMe(), getCraftworldHome()]);
       setMe(meData);
       setHome(homeData || {});
-      setFactoryRows(loadedFactoryRows);
+
+try {
+        const rows = await loadFactoryData();
+        setFactoryRows(rows);
+      } catch (err) {
+        console.error('Failed to load factory CSV', err);
+        setFactoryRows([]);
+      }
       setCraftWorldUidInput(meData.craftWorldUid || meData.craftWorldUserId || '');
 
       const uid = meData.craftWorldUid || meData.craftWorldUserId;
@@ -191,11 +198,6 @@ export default function MyHome() {
     return acc;
   }, {});
 
-  const factoryRowsByTokenLevel = useMemo(() => {
-    const rowMap = new Map<string, FactoryDataRow>();
-    factoryRows.forEach((row) => rowMap.set(`${row.token}-${row.level}`, row));
-    return rowMap;
-  }, [factoryRows]);
 
   const orderedPlots = Object.entries(factoriesByPlot).sort(([plotA], [plotB]) => {
     const indexA = plotDisplayOrder.indexOf(plotA);
