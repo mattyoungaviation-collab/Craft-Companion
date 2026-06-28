@@ -160,6 +160,12 @@ export default function MyHome() {
     load();
   }, []);
 
+  const factoryRowsByTokenLevel = useMemo(() => {
+    const rowMap = new Map<string, FactoryDataRow>();
+    factoryRows.forEach((row) => rowMap.set(`${row.token}-${row.level}`, row));
+    return rowMap;
+  }, [factoryRows]);
+
   if (!me || !home) return <Layout>Loading...</Layout>;
 
   const account = home.account || {};
