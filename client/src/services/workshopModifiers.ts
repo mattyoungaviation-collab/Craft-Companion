@@ -32,27 +32,34 @@ export function getWorkshopUpgradeLevel(symbol: string, workshop: WorkshopItem[]
   const normalized = normalizeSymbol(symbol);
   const item = workshop.find((entry) => normalizeSymbol(entry.symbol) === normalized);
   const level = Math.floor(Number(item?.level || 0));
-  if (!Number.isFinite(level) || level <= 0) return 0;
+  if (!Number.isFinite(level) || level < 0) return 0;
   return Math.min(level, 10);
 }
 
 export function getWorkshopSpeedBoostPercent(symbol: string, workshop: WorkshopItem[]) {
   const tier = getWorkshopTier(symbol);
   const level = getWorkshopUpgradeLevel(symbol, workshop);
-  if (!tier || !level) return 0;
-  return WORKSHOP_BOOSTS_BY_TIER[tier]?.[level] || 0;
+  if (!tier) return 0;
+
+  // Craft World's returned workshop level represents the owned/current level, while the visible
+  // active speed effect corresponds to the next table slot. Example matches from screenshots:
+  // MUD workshop level 2 -> 35%, and SEAWATER workshop level 9 -> 82%.
+  const boostIndex = Math.min(level + 1, 10);
+  return WORKSHOP_BOOSTS_BY_TIER[tier]?.[boostIndex] || 0;
 }
 
 export function applyWorkshopSpeedToDuration(durationMinutes: number, symbol: string, workshop: WorkshopItem[]) {
   const boostPercent = getWorkshopSpeedBoostPercent(symbol, workshop);
   const duration = Number(durationMinutes || 0);
   if (!Number.isFinite(duration) || duration <= 0) return duration;
-  if (boostPercent >= 100) return 0;
-  return duration * (1 - boostPercent / 100);
+  if (!Number.isFinite(boostPercent) || boostPercent <= 0) return duration;
+
+  // Workshop is a speed boost, not a direct duration reduction.
+  // 35% speed boost means duration / 1.35, not duration * 0.65.
+  return duration / (1 + boostPercent / 100);
 }
 
 export function getRunsPerHourWithWorkshop(durationMinutes: number, symbol: string, workshop: WorkshopItem[]) {
   const adjustedDuration = applyWorkshopSpeedToDuration(durationMinutes, symbol, workshop);
-  if (adjustedDuration === 0) return Number.POSITIVE_INFINITY;
-  return adjustedDuration > 0 ? 60 / adjustedDuration : 0;
+  return adjustedDuration > 0 && Number.isFinite(adjustedDuration) ? 60 / adjustedDuration : 0;
 }
