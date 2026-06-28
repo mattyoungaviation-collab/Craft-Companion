@@ -118,6 +118,13 @@ export type CycleTimerStatus = {
   paused: boolean;
 };
 
+export type CycleWindow = {
+  startedAt?: string;
+  endsAt?: string;
+  durationSeconds: number;
+  hasWindow: boolean;
+};
+
 const HOURS_PER_DAY = 24;
 const MINUTES_PER_HOUR = 60;
 
@@ -348,6 +355,26 @@ export function calculateTimeUntilResources(targetAmount: number, currentAmount:
   if (missingAmount <= 0) return { missingAmount: 0, hours: 0, ready: true };
   const rate = finiteNumber(productionPerHour, 0);
   return { missingAmount, hours: rate > 0 ? missingAmount / rate : Number.POSITIVE_INFINITY, ready: false };
+}
+
+export function calculateCycleWindow(runtimeMinutes: number, startedAt?: string | null): CycleWindow {
+  const durationSeconds = Math.max(0, Math.round(finiteNumber(runtimeMinutes, 0) * 60));
+  const startedMs = startedAt ? new Date(startedAt).getTime() : 0;
+
+  if (!durationSeconds || !startedAt || !Number.isFinite(startedMs) || startedMs <= 0) {
+    return {
+      startedAt: startedAt || undefined,
+      durationSeconds,
+      hasWindow: false,
+    };
+  }
+
+  return {
+    startedAt,
+    endsAt: new Date(startedMs + durationSeconds * 1000).toISOString(),
+    durationSeconds,
+    hasWindow: true,
+  };
 }
 
 export function calculateCycleTimerStatus(input: CycleTimerInput): CycleTimerStatus {

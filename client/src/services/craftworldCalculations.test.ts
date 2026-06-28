@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   buildRecipeTree,
+  calculateCycleWindow,
   calculateFactoryCycle,
   calculateFactoryRuntime,
   calculateCycleTimerStatus,
@@ -178,4 +179,19 @@ test('cycle timer reports remaining time and completed cycles from persisted sta
   assert.equal(status.elapsedSeconds, 1530);
   assert.equal(status.remainingSeconds, 270);
   assert.equal(Number(status.progressPercent.toFixed(0)), 55);
+});
+
+test('cycle window calculates end time from start and runtime', () => {
+  const window = calculateCycleWindow(10, '2026-06-28T12:00:00.000Z');
+  assert.equal(window.hasWindow, true);
+  assert.equal(window.startedAt, '2026-06-28T12:00:00.000Z');
+  assert.equal(window.endsAt, '2026-06-28T12:10:00.000Z');
+  assert.equal(window.durationSeconds, 600);
+});
+
+test('cycle window marks missing start time as incomplete', () => {
+  const window = calculateCycleWindow(10);
+  assert.equal(window.hasWindow, false);
+  assert.equal(window.endsAt, undefined);
+  assert.equal(window.durationSeconds, 600);
 });

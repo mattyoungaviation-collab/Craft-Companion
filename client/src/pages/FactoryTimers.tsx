@@ -3,6 +3,7 @@ import Card from '../components/Card';
 import Layout from '../components/Layout';
 import { getCraftworldHome } from '../services/api';
 import {
+  calculateCycleWindow,
   calculateCycleTimerStatus,
   calculateFactoryCycle,
   type FactoryDataRow,
@@ -44,6 +45,10 @@ function fmt(value: number, digits = 2) {
 
 function formatSeconds(seconds: number) {
   return formatDurationFromMinutes(Math.max(seconds, 0) / 60);
+}
+
+function formatTimestamp(value?: string) {
+  return value ? new Date(value).toLocaleString() : 'Not available';
 }
 
 function timerSource(factory: OwnedFactory, timer?: StoredTimer) {
@@ -92,7 +97,7 @@ export default function FactoryTimers() {
 
   useEffect(() => {
     setTimers(loadTimers());
-    const interval = window.setInterval(() => setNow(new Date()), 1000);
+    const interval = window.setInterval(() => setNow(new Date()), 5000);
     return () => window.clearInterval(interval);
   }, []);
 
@@ -123,9 +128,11 @@ export default function FactoryTimers() {
         const key = factory.id || `${factory.landPlotName || 'plot'}-${symbol}-${level}-${index}`;
         const cycle = calculateFactoryCycle(row, {}, { workshop: home?.workshop || [], activeBoosts: factory.activeBoosts || [] });
         const storedTimer = timers[key];
+        const startedAt = timerStartedAt(factory, storedTimer);
+        const cycleWindow = calculateCycleWindow(cycle.runtimeMinutes, startedAt);
         const status = calculateCycleTimerStatus({
           runtimeMinutes: cycle.runtimeMinutes,
-          startedAt: timerStartedAt(factory, storedTimer),
+          startedAt,
           pausedAt: timerPausedAt(storedTimer),
           now,
         });
@@ -135,8 +142,9 @@ export default function FactoryTimers() {
           row,
           cycle,
           status,
+          cycleWindow,
           source: timerSource(factory, storedTimer),
-          startedAt: timerStartedAt(factory, storedTimer),
+          startedAt,
           estimatedCompleted: Math.max(0, Number(factory.unclaimedUnitsBeforeCurrentRun || 0)) + status.completedCycles,
         };
       })
@@ -180,13 +188,15 @@ export default function FactoryTimers() {
         <Card title="Active Factories">
           {timerRows.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-left text-sm">
+              <table className="w-full min-w-[1220px] text-left text-sm">
                 <thead className="text-slate-300">
                   <tr>
                     <th className="p-2">Factory</th>
                     <th className="p-2">Runtime</th>
                     <th className="p-2">Source</th>
                     <th className="p-2">Started</th>
+                    <th className="p-2">Ends</th>
+                    <th className="p-2">Start to End</th>
                     <th className="p-2">Cycles / Hr</th>
                     <th className="p-2">Cycles / Day</th>
                     <th className="p-2">Remaining</th>
@@ -196,12 +206,14 @@ export default function FactoryTimers() {
                   </tr>
                 </thead>
                 <tbody>
-                  {timerRows.map(({ key, factory, row, cycle, status, source, startedAt, estimatedCompleted }) => (
+                  {timerRows.map(({ key, factory, row, cycle, status, cycleWindow, source, startedAt, estimatedCompleted }) => (
                     <tr key={key} className="border-t border-slate-800">
                       <td className="p-2 font-semibold">{factory.landPlotName || 'Unknown plot'} • {row.token} Lv {row.level}</td>
                       <td className="p-2">{formatDurationFromMinutes(cycle.runtimeMinutes)}</td>
                       <td className="p-2">{source}</td>
-                      <td className="p-2">{startedAt ? new Date(startedAt).toLocaleTimeString() : 'Not available'}</td>
+                      <td className="p-2">{formatTimestamp(startedAt)}</td>
+                      <td className="p-2">{formatTimestamp(cycleWindow.endsAt)}</td>
+                      <td className="p-2">{cycleWindow.hasWindow ? formatSeconds(cycleWindow.durationSeconds) : 'Waiting for start time'}</td>
                       <td className="p-2">{fmt(cycle.runsPerHour, 3)}</td>
                       <td className="p-2">{fmt(cycle.runsPerDay, 2)}</td>
                       <td className="p-2">
