@@ -18,6 +18,9 @@ type OwnedFactory = {
   level?: number;
   landPlotName?: string;
   currentRunLevel?: number;
+  startedAt?: string;
+  claimedAt?: string;
+  unclaimedUnitsBeforeCurrentRun?: number;
   activeBoosts?: FactoryBoost[];
 };
 
@@ -30,6 +33,7 @@ type HomeData = {
 type StoredTimer = {
   startedAt?: string;
   pausedAt?: string;
+  manual?: boolean;
 };
 
 const STORAGE_KEY = 'craftworld.factoryTimers.v1';
@@ -40,6 +44,21 @@ function fmt(value: number, digits = 2) {
 
 function formatSeconds(seconds: number) {
   return formatDurationFromMinutes(Math.max(seconds, 0) / 60);
+}
+
+function timerSource(factory: OwnedFactory, timer?: StoredTimer) {
+  if (timer?.manual && timer.startedAt) return 'Manual override';
+  if (factory.startedAt) return 'Craft World API';
+  return 'Missing start time';
+}
+
+function timerStartedAt(factory: OwnedFactory, timer?: StoredTimer) {
+  if (timer?.manual && timer.startedAt) return timer.startedAt;
+  return factory.startedAt;
+}
+
+function timerPausedAt(timer?: StoredTimer) {
+  return timer?.manual ? timer.pausedAt : undefined;
 }
 
 function getDisplayLevel(factory: OwnedFactory) {
@@ -103,13 +122,23 @@ export default function FactoryTimers() {
         if (!symbol || !row) return null;
         const key = factory.id || `${factory.landPlotName || 'plot'}-${symbol}-${level}-${index}`;
         const cycle = calculateFactoryCycle(row, {}, { workshop: home?.workshop || [], activeBoosts: factory.activeBoosts || [] });
+        const storedTimer = timers[key];
         const status = calculateCycleTimerStatus({
           runtimeMinutes: cycle.runtimeMinutes,
-          startedAt: timers[key]?.startedAt,
-          pausedAt: timers[key]?.pausedAt,
+          startedAt: timerStartedAt(factory, storedTimer),
+          pausedAt: timerPausedAt(storedTimer),
           now,
         });
-        return { key, factory, row, cycle, status };
+        return {
+          key,
+          factory,
+          row,
+          cycle,
+          status,
+          source: timerSource(factory, storedTimer),
+          startedAt: timerStartedAt(factory, storedTimer),
+          estimatedCompleted: Math.max(0, Number(factory.unclaimedUnitsBeforeCurrentRun || 0)) + status.completedCycles,
+        };
       })
       .filter((value): value is NonNullable<typeof value> => Boolean(value));
   }, [home, now, rows, timers]);
@@ -141,8 +170,7 @@ export default function FactoryTimers() {
         <Card title="Factory Timers">
           <div className="space-y-2 text-sm text-slate-300">
             <p>
-              Craft World start timestamps are not always available in synced data, so this page uses manual local timers.
-              Start times are persisted in this browser.
+              Timers use Craft World API startedAt timestamps when available. Manual starts are still available as a local override.
             </p>
             <p className="text-slate-400">Last synced: {home?.lastSyncedAt ? new Date(home.lastSyncedAt).toLocaleString() : 'Not connected'}</p>
             {error && <p className="text-red-300">{error}</p>}
@@ -157,19 +185,23 @@ export default function FactoryTimers() {
                   <tr>
                     <th className="p-2">Factory</th>
                     <th className="p-2">Runtime</th>
+                    <th className="p-2">Source</th>
+                    <th className="p-2">Started</th>
                     <th className="p-2">Cycles / Hr</th>
                     <th className="p-2">Cycles / Day</th>
                     <th className="p-2">Remaining</th>
                     <th className="p-2">Progress</th>
-                    <th className="p-2">Completed</th>
+                    <th className="p-2">Est. Complete</th>
                     <th className="p-2">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {timerRows.map(({ key, factory, row, cycle, status }) => (
+                  {timerRows.map(({ key, factory, row, cycle, status, source, startedAt, estimatedCompleted }) => (
                     <tr key={key} className="border-t border-slate-800">
                       <td className="p-2 font-semibold">{factory.landPlotName || 'Unknown plot'} • {row.token} Lv {row.level}</td>
                       <td className="p-2">{formatDurationFromMinutes(cycle.runtimeMinutes)}</td>
+                      <td className="p-2">{source}</td>
+                      <td className="p-2">{startedAt ? new Date(startedAt).toLocaleTimeString() : 'Not available'}</td>
                       <td className="p-2">{fmt(cycle.runsPerHour, 3)}</td>
                       <td className="p-2">{fmt(cycle.runsPerDay, 2)}</td>
                       <td className="p-2">
@@ -182,21 +214,27 @@ export default function FactoryTimers() {
                         </div>
                         <span className="text-xs text-slate-400">{fmt(status.progressPercent, 1)}%</span>
                       </td>
-                      <td className="p-2">{status.completedCycles}</td>
+                      <td className="p-2">
+                        {estimatedCompleted}
+                        {factory.unclaimedUnitsBeforeCurrentRun ? (
+                          <span className="ml-1 text-xs text-slate-400">({factory.unclaimedUnitsBeforeCurrentRun} unclaimed before current)</span>
+                        ) : null}
+                      </td>
                       <td className="p-2">
                         <div className="flex flex-wrap gap-2">
-                          <button onClick={() => updateTimer(key, { startedAt: new Date().toISOString() })} className="rounded bg-blue-600 px-3 py-1 font-semibold">Start now</button>
+                          <button onClick={() => updateTimer(key, { startedAt: new Date().toISOString(), manual: true })} className="rounded bg-blue-600 px-3 py-1 font-semibold">Manual start</button>
                           <button
                             onClick={() => {
                               const existing = timers[key];
-                              if (!existing?.startedAt) return;
-                              updateTimer(key, existing.pausedAt ? { startedAt: existing.startedAt } : { ...existing, pausedAt: new Date().toISOString() });
+                              if (!existing?.manual || !existing.startedAt) return;
+                              updateTimer(key, existing.pausedAt ? { startedAt: existing.startedAt, manual: true } : { ...existing, pausedAt: new Date().toISOString(), manual: true });
                             }}
                             className="rounded bg-slate-700 px-3 py-1 font-semibold"
+                            disabled={!timers[key]?.manual}
                           >
                             {timers[key]?.pausedAt ? 'Resume' : 'Pause'}
                           </button>
-                          <button onClick={() => resetTimer(key)} className="rounded bg-red-700 px-3 py-1 font-semibold">Reset</button>
+                          <button onClick={() => resetTimer(key)} className="rounded bg-red-700 px-3 py-1 font-semibold">Use API</button>
                         </div>
                       </td>
                     </tr>
