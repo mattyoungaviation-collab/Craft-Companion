@@ -118,6 +118,15 @@ export type CycleTimerStatus = {
   paused: boolean;
 };
 
+export type CycleWindow = {
+  startedAt?: string;
+  endsAt?: string;
+  durationSeconds: number;
+  secondsUntilEnd: number;
+  hasWindow: boolean;
+  ended: boolean;
+};
+
 const HOURS_PER_DAY = 24;
 const MINUTES_PER_HOUR = 60;
 
@@ -348,6 +357,34 @@ export function calculateTimeUntilResources(targetAmount: number, currentAmount:
   if (missingAmount <= 0) return { missingAmount: 0, hours: 0, ready: true };
   const rate = finiteNumber(productionPerHour, 0);
   return { missingAmount, hours: rate > 0 ? missingAmount / rate : Number.POSITIVE_INFINITY, ready: false };
+}
+
+export function calculateCycleWindow(runtimeMinutes: number, startedAt?: string | null, now?: string | Date): CycleWindow {
+  const durationSeconds = Math.max(0, Math.round(finiteNumber(runtimeMinutes, 0) * 60));
+  const startedMs = startedAt ? new Date(startedAt).getTime() : 0;
+  const nowMs = now instanceof Date ? now.getTime() : new Date(now || new Date()).getTime();
+
+  if (!durationSeconds || !startedAt || !Number.isFinite(startedMs) || startedMs <= 0) {
+    return {
+      startedAt: startedAt || undefined,
+      durationSeconds,
+      secondsUntilEnd: durationSeconds,
+      hasWindow: false,
+      ended: false,
+    };
+  }
+
+  const endsMs = startedMs + durationSeconds * 1000;
+  const secondsUntilEnd = Number.isFinite(nowMs) ? Math.ceil((endsMs - nowMs) / 1000) : durationSeconds;
+
+  return {
+    startedAt,
+    endsAt: new Date(endsMs).toISOString(),
+    durationSeconds,
+    secondsUntilEnd: Math.max(secondsUntilEnd, 0),
+    hasWindow: true,
+    ended: secondsUntilEnd <= 0,
+  };
 }
 
 export function calculateCycleTimerStatus(input: CycleTimerInput): CycleTimerStatus {
