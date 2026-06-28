@@ -4,6 +4,7 @@ import {
   buildRecipeTree,
   calculateFactoryCycle,
   calculateFactoryRuntime,
+  calculateCycleTimerStatus,
   calculateProfitPerCycle,
   calculateTimeUntilResources,
   calculateUpgradeRecommendation,
@@ -157,4 +158,24 @@ test('recommendation ranking prefers fastest ROI when data exists', () => {
   assert.equal(best.row.level, 1);
   assert.equal(best.label, 'Best ROI');
   assert.ok(best.paybackDays !== null);
+});
+
+test('cycle timer requires a start time when none is known', () => {
+  const status = calculateCycleTimerStatus({ runtimeMinutes: 10, now: '2026-06-28T12:00:00.000Z' });
+  assert.equal(status.requiresStartTime, true);
+  assert.equal(status.remainingSeconds, 600);
+  assert.equal(status.completedCycles, 0);
+});
+
+test('cycle timer reports remaining time and completed cycles from persisted start', () => {
+  const status = calculateCycleTimerStatus({
+    runtimeMinutes: 10,
+    startedAt: '2026-06-28T12:00:00.000Z',
+    now: '2026-06-28T12:25:30.000Z',
+  });
+  assert.equal(status.requiresStartTime, false);
+  assert.equal(status.completedCycles, 2);
+  assert.equal(status.elapsedSeconds, 1530);
+  assert.equal(status.remainingSeconds, 270);
+  assert.equal(Number(status.progressPercent.toFixed(0)), 55);
 });
