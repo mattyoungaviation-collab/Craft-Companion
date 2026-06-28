@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Card from '../components/Card';
 import Layout from '../components/Layout';
 import {
@@ -8,6 +8,10 @@ import {
   getMe,
   updateCraftworldIdentity,
 } from '../services/api';
+import { formatDurationFromMinutes, getDurationMinutesFromRunsPerHour, getEffectiveSpeedPercent } from '../services/durationFormat';
+import { getRunsPerHourWithFactoryBoosts, type FactoryBoost } from '../services/factoryBoostModifiers';
+import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
+import { applyWorkshopSpeedToDuration } from '../services/workshopModifiers';
 
 type ResourceAmount = { symbol?: string; amount?: number };
 type DynoSummary = { displayName?: string; rarity?: string; isOneOfOne?: boolean };
@@ -17,7 +21,7 @@ type FactorySummary = {
   level?: number;
   landPlotName?: string;
   currentRunLevel?: number;
-  activeBoosts?: { boostValue?: number }[];
+  activeBoosts?: FactoryBoost[];
 };
 type VaultSummary = { symbol?: string; amount?: number; capacity?: number; isUnlocked?: boolean };
 type WorkshopItem = { symbol?: string; level?: number };
@@ -86,9 +90,25 @@ function getFactoryImage(symbol?: string) {
   return factoryImages[symbol.toUpperCase()] || '';
 }
 
+function getDisplayBoostValue(value: number) {
+  return value <= 1 ? value * 100 : value;
+}
+
+function getActiveBoostPercentSum(boosts: FactoryBoost[] = []) {
+  return boosts.reduce((total, boost) => {
+    const value = Number(boost.boostValue || 0);
+    return Number.isFinite(value) && value > 0 ? total + getDisplayBoostValue(value) : total;
+  }, 0);
+}
+
+function formatSpeed(value: number) {
+  return `${formatNumber(value)}% / ${formatNumber(value / 100)}x`;
+}
+
 export default function MyHome() {
   const [me, setMe] = useState<any>();
   const [home, setHome] = useState<HomeData>();
+  const [factoryRows, setFactoryRows] = useState<FactoryDataRow[]>([]);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [walletData, setWalletData] = useState<WalletData | null>(null);
   const [craftWorldUidInput, setCraftWorldUidInput] = useState('');
@@ -98,9 +118,10 @@ export default function MyHome() {
   const load = async () => {
     setError('');
     try {
-      const [meData, homeData] = await Promise.all([getMe(), getCraftworldHome()]);
+      const [meData, homeData, loadedFactoryRows] = await Promise.all([getMe(), getCraftworldHome(), loadFactoryData()]);
       setMe(meData);
       setHome(homeData || {});
+      setFactoryRows(loadedFactoryRows);
       setCraftWorldUidInput(meData.craftWorldUid || meData.craftWorldUserId || '');
 
       const uid = meData.craftWorldUid || meData.craftWorldUserId;
@@ -163,6 +184,12 @@ export default function MyHome() {
     acc[plotKey].push(factory);
     return acc;
   }, {});
+
+  const factoryRowsByTokenLevel = useMemo(() => {
+    const rowMap = new Map<string, FactoryDataRow>();
+    factoryRows.forEach((row) => rowMap.set(`${row.token}-${row.level}`, row));
+    return rowMap;
+  }, [factoryRows]);
 
   const orderedPlots = Object.entries(factoriesByPlot).sort(([plotA], [plotB]) => {
     const indexA = plotDisplayOrder.indexOf(plotA);
@@ -297,8 +324,9 @@ export default function MyHome() {
 
                 const activeBoostValues = sortedFactories
                   .flatMap((factory) => factory.activeBoosts || [])
-                  .map((boost) => boost.boostValue || 0)
-                  .filter((value) => value > 0);
+                  .map((boost) => Number(boost.boostValue || 0))
+                  .filter((value) => value > 0)
+                  .map(getDisplayBoostValue);
 
                 return (
                   <div key={plotName} className="space-y-2">
@@ -317,8 +345,13 @@ export default function MyHome() {
                         const displayLevel = (factory.level ?? 0) + 1;
                         const craftDisplayLevel =
                           typeof factory.currentRunLevel === 'number' ? factory.currentRunLevel + 1 : null;
-                        const boostValue = factory.activeBoosts?.[0]?.boostValue || 0;
                         const symbol = factory.areaSymbol || 'Unknown';
+                        const factoryRow = factoryRowsByTokenLevel.get(`${String(factory.areaSymbol || '').trim().toUpperCase()}-${displayLevel}`);
+                        const workshopDuration = factoryRow ? applyWorkshopSpeedToDuration(factoryRow.duration_min, factoryRow.token, workshop) : 0;
+                        const runsPerHour = factoryRow ? getRunsPerHourWithFactoryBoosts(workshopDuration, factory.activeBoosts || []) : 0;
+                        const calculatedDurationMinutes = getDurationMinutesFromRunsPerHour(runsPerHour);
+                        const effectiveSpeedPercent = factoryRow ? getEffectiveSpeedPercent(factoryRow.duration_min, calculatedDurationMinutes) : 0;
+                        const boostValue = getActiveBoostPercentSum(factory.activeBoosts || []);
                         const factoryImage = getFactoryImage(symbol);
 
                         return (
@@ -336,7 +369,16 @@ export default function MyHome() {
                                 Lv {displayLevel}
                                 {craftDisplayLevel !== null ? ` • Craft Lv ${craftDisplayLevel}` : ''}
                               </p>
-                              {boostValue > 0 ? <p className="text-slate-400">Boost {boostValue}%</p> : null}
+                              {boostValue > 0 ? <p className="text-slate-400">Boost {formatNumber(boostValue)}%</p> : null}
+                              {factoryRow ? (
+                                <>
+                                  <p className="text-slate-400">Base Time: {formatDurationFromMinutes(factoryRow.duration_min)}</p>
+                                  <p className="text-slate-400">Output Time: {formatDurationFromMinutes(calculatedDurationMinutes)}</p>
+                                  <p className="text-slate-400">Speed: {formatSpeed(effectiveSpeedPercent)}</p>
+                                </>
+                              ) : (
+                                <p className="text-yellow-200">Duration: No CSV match</p>
+                              )}
                             </div>
                           </div>
                         );
