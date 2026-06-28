@@ -6,6 +6,7 @@ import { getActiveFactoryBoostPercent, getRunsPerHourWithFactoryBoosts, type Fac
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
 import { applyMasteryInputReduction, getMasteryInputReductionPercent, getMasteryLevel, type ProficiencyItem } from '../services/masteryModifiers';
 import { applyWorkshopSpeedToDuration, getWorkshopSpeedBoostPercent, type WorkshopItem } from '../services/workshopModifiers';
+import { formatDurationFromMinutes, getDurationMinutesFromRunsPerHour, getEffectiveSpeedPercent } from '../services/durationFormat';
 
 type OwnedFactory = {
   id?: string;
@@ -52,6 +53,9 @@ type ProfitAdvisorRow = {
   profitPerRun: number;
   profitPerHour: number;
   runsPerHour: number;
+  baseDurationMinutes: number;
+  calculatedDurationMinutes: number;
+  effectiveSpeedPercent: number;
   workshopBoostPercent: number;
   activeBoostPercent: number;
   masteryLevel: number;
@@ -64,6 +68,10 @@ const QUOTE_BATCH_SIZE = 12;
 
 function formatNumber(value: number, digits = 6) {
   return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: digits }) : '0';
+}
+
+function formatSpeed(value: number) {
+  return `${formatNumber(value, 2)}% / ${formatNumber(value / 100, 2)}x`;
 }
 
 function formatFactoryLabel(option: OwnedFactoryOption) {
@@ -302,6 +310,9 @@ export default function Profitability() {
         const inputCost = (input1Quote?.input.amount || 0) + (input2Quote?.input.amount || 0);
         const profitPerRun = outputValue - inputCost;
         const runsPerHour = getRunsPerHourWithAllSpeed(row, option, workshop);
+        const baseDurationMinutes = row.duration_min;
+        const calculatedDurationMinutes = getDurationMinutesFromRunsPerHour(runsPerHour);
+        const effectiveSpeedPercent = getEffectiveSpeedPercent(baseDurationMinutes, calculatedDurationMinutes);
         const profitPerHour = profitPerRun * runsPerHour;
         const impacts = [outputQuote, input1Quote, input2Quote]
           .map((quote) => quote?.details?.priceImpactPercentage || 0)
@@ -315,6 +326,9 @@ export default function Profitability() {
           profitPerRun,
           profitPerHour,
           runsPerHour,
+          baseDurationMinutes,
+          calculatedDurationMinutes,
+          effectiveSpeedPercent,
           workshopBoostPercent: getWorkshopSpeedBoostPercent(row.token, workshop),
           activeBoostPercent: getActiveFactoryBoostPercent(option.factory.activeBoosts || []),
           masteryLevel: getMasteryLevel(row.token, proficiencies),
@@ -346,6 +360,9 @@ export default function Profitability() {
   const profitPerRun = outputValue - inputCost;
   const runsPerHour = selectedRow && selectedFactory ? getRunsPerHourWithAllSpeed(selectedRow, selectedFactory, workshop) : 0;
   const profitPerHour = profitPerRun * runsPerHour;
+  const selectedBaseDurationMinutes = selectedRow?.duration_min || 0;
+  const selectedCalculatedDurationMinutes = getDurationMinutesFromRunsPerHour(runsPerHour);
+  const selectedEffectiveSpeedPercent = getEffectiveSpeedPercent(selectedBaseDurationMinutes, selectedCalculatedDurationMinutes);
   const upgradeCost = upgradeQuote?.input.amount || 0;
 
   if (loading) {
@@ -380,6 +397,9 @@ export default function Profitability() {
                 <p>{formatFactoryLabel(bestAdvisorRow.option)}</p>
                 <p>Workshop speed boost: {formatNumber(bestAdvisorRow.workshopBoostPercent, 2)}%</p>
                 <p>Active boost: {formatNumber(bestAdvisorRow.activeBoostPercent, 2)}%</p>
+                <p>Base Time: {formatDurationFromMinutes(bestAdvisorRow.baseDurationMinutes)}</p>
+                <p>Output Time: {formatDurationFromMinutes(bestAdvisorRow.calculatedDurationMinutes)}</p>
+                <p>Effective Speed: {formatSpeed(bestAdvisorRow.effectiveSpeedPercent)}</p>
                 <p>Mastery: Lv {bestAdvisorRow.masteryLevel} / {formatNumber(bestAdvisorRow.masteryReductionPercent, 2)}% {bestAdvisorRow.row.token}</p>
                 <p>Estimated profit per hour: {formatNumber(bestAdvisorRow.profitPerHour)} COIN</p>
                 <p>Estimated profit per run: {formatNumber(bestAdvisorRow.profitPerRun)} COIN</p>
@@ -401,6 +421,9 @@ export default function Profitability() {
                     <th className="p-2">Workshop</th>
                     <th className="p-2">Active Boost</th>
                     <th className="p-2">Mastery</th>
+                    <th className="p-2">Base Time</th>
+                    <th className="p-2">Output Time</th>
+                    <th className="p-2">Effective Speed</th>
                     <th className="p-2">Profit Per Hour</th>
                     <th className="p-2">Profit Per Run</th>
                     <th className="p-2">Input Buy Cost</th>
@@ -417,6 +440,9 @@ export default function Profitability() {
                       <td className="p-2">{formatNumber(advisorRow.workshopBoostPercent, 2)}%</td>
                       <td className="p-2">{formatNumber(advisorRow.activeBoostPercent, 2)}%</td>
                       <td className="p-2">Lv {advisorRow.masteryLevel} / {formatNumber(advisorRow.masteryReductionPercent, 2)}% {advisorRow.row.token}</td>
+                      <td className="p-2">{formatDurationFromMinutes(advisorRow.baseDurationMinutes)}</td>
+                      <td className="p-2">{formatDurationFromMinutes(advisorRow.calculatedDurationMinutes)}</td>
+                      <td className="p-2">{formatSpeed(advisorRow.effectiveSpeedPercent)}</td>
                       <td className={advisorRow.profitPerHour >= 0 ? 'p-2 text-emerald-300' : 'p-2 text-red-300'}>
                         {advisorRow.missingQuote ? 'Waiting' : `${formatNumber(advisorRow.profitPerHour)} COIN`}
                       </td>
@@ -490,6 +516,9 @@ export default function Profitability() {
                 <p>Craft Level: {selectedFactory.craftDisplayLevel || 'N/A'}</p>
                 <p>CSV Level: {selectedRow.level}</p>
                 <p>Original Duration: {formatNumber(selectedRow.duration_min, 2)} min</p>
+                <p>Base Time: {formatDurationFromMinutes(selectedBaseDurationMinutes)}</p>
+                <p>Output Time: {formatDurationFromMinutes(selectedCalculatedDurationMinutes)}</p>
+                <p>Effective Speed: {formatSpeed(selectedEffectiveSpeedPercent)}</p>
                 <p>Workshop Speed Boost: {formatNumber(selectedWorkshopBoostPercent, 2)}%</p>
                 <p>Active Boost: {formatNumber(selectedActiveBoostPercent, 2)}%</p>
                 <p>Mastery: Lv {selectedMasteryLevel} / {formatNumber(selectedMasteryReductionPercent, 2)}% {selectedRow.token}</p>
@@ -517,6 +546,9 @@ export default function Profitability() {
                 <p>Profit Per Run: {formatNumber(profitPerRun)} COIN</p>
                 <p>Profit Per Hour: {formatNumber(profitPerHour)} COIN</p>
                 <p>Runs Per Hour: {formatNumber(runsPerHour, 4)}</p>
+                <p>Base Time: {formatDurationFromMinutes(selectedBaseDurationMinutes)}</p>
+                <p>Output Time: {formatDurationFromMinutes(selectedCalculatedDurationMinutes)}</p>
+                <p>Effective Speed: {formatSpeed(selectedEffectiveSpeedPercent)}</p>
                 <p>Upgrade Buy Cost: {formatNumber(upgradeCost)} COIN</p>
               </div>
             </Card>
