@@ -14,6 +14,10 @@ function isBoostActive(boost: FactoryBoost, now = Date.now()) {
   return true;
 }
 
+function normalizeSource(source?: string) {
+  return String(source || '').trim().toLowerCase();
+}
+
 export function getFactoryBoostMultiplier(boost: FactoryBoost) {
   const value = Number(boost.boostValue || 0);
   if (!Number.isFinite(value) || value <= 0) return 1;
@@ -27,7 +31,15 @@ export function getFactoryBoostMultiplier(boost: FactoryBoost) {
 }
 
 export function getActiveFactoryBoosts(boosts: FactoryBoost[] = []) {
-  return boosts.filter((boost) => isBoostActive(boost));
+  const activeBoosts = boosts.filter((boost) => isBoostActive(boost));
+  const hasConsumableBoost = activeBoosts.some((boost) => normalizeSource(boost.source) === 'consumable');
+
+  // Craft World appears to return a source="factory" 0.5 alongside consumables on some runs,
+  // but the in-game timer does not apply that extra 2x. Counting it makes affected factories
+  // finish exactly twice as fast as the game shows, so ignore it when a consumable is active.
+  if (!hasConsumableBoost) return activeBoosts;
+
+  return activeBoosts.filter((boost) => normalizeSource(boost.source) !== 'factory');
 }
 
 export function getTotalFactoryBoostMultiplier(boosts: FactoryBoost[] = []) {
