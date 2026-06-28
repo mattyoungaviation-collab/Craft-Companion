@@ -18,14 +18,20 @@ export function getFactoryBoostMultiplier(boost: FactoryBoost) {
   const value = Number(boost.boostValue || 0);
   if (!Number.isFinite(value) || value <= 0) return 1;
 
-  if (value < 1) return 1 / value;
+  // Craft World returns 0.5 for 2x time-cut boosts.
+  // Workers can return values like 0.277777..., which means 1 / 0.277777... = 3.6x.
+  if (value > 0 && value < 1) return 1 / value;
+
+  // If Craft World ever returns a whole multiplier directly, preserve it.
   return value;
 }
 
+export function getActiveFactoryBoosts(boosts: FactoryBoost[] = []) {
+  return boosts.filter((boost) => isBoostActive(boost));
+}
+
 export function getTotalFactoryBoostMultiplier(boosts: FactoryBoost[] = []) {
-  return boosts
-    .filter((boost) => isBoostActive(boost))
-    .reduce((total, boost) => total * getFactoryBoostMultiplier(boost), 1);
+  return getActiveFactoryBoosts(boosts).reduce((total, boost) => total * getFactoryBoostMultiplier(boost), 1);
 }
 
 export function getActiveFactoryBoostPercent(boosts: FactoryBoost[] = []) {
