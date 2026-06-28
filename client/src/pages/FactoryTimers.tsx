@@ -47,6 +47,10 @@ function formatSeconds(seconds: number) {
   return formatDurationFromMinutes(Math.max(seconds, 0) / 60);
 }
 
+function formatTimeToEnd(seconds: number, ended: boolean) {
+  return ended ? 'Ready' : formatSeconds(seconds);
+}
+
 function formatTimestamp(value?: string) {
   return value ? new Date(value).toLocaleString() : 'Not available';
 }
@@ -129,7 +133,7 @@ export default function FactoryTimers() {
         const cycle = calculateFactoryCycle(row, {}, { workshop: home?.workshop || [], activeBoosts: factory.activeBoosts || [] });
         const storedTimer = timers[key];
         const startedAt = timerStartedAt(factory, storedTimer);
-        const cycleWindow = calculateCycleWindow(cycle.runtimeMinutes, startedAt);
+        const cycleWindow = calculateCycleWindow(cycle.runtimeMinutes, startedAt, now);
         const status = calculateCycleTimerStatus({
           runtimeMinutes: cycle.runtimeMinutes,
           startedAt,
@@ -196,7 +200,7 @@ export default function FactoryTimers() {
                     <th className="p-2">Source</th>
                     <th className="p-2">Started</th>
                     <th className="p-2">Ends</th>
-                    <th className="p-2">Start to End</th>
+                    <th className="p-2">Time to End</th>
                     <th className="p-2">Cycles / Hr</th>
                     <th className="p-2">Cycles / Day</th>
                     <th className="p-2">Remaining</th>
@@ -213,7 +217,7 @@ export default function FactoryTimers() {
                       <td className="p-2">{source}</td>
                       <td className="p-2">{formatTimestamp(startedAt)}</td>
                       <td className="p-2">{formatTimestamp(cycleWindow.endsAt)}</td>
-                      <td className="p-2">{cycleWindow.hasWindow ? formatSeconds(cycleWindow.durationSeconds) : 'Waiting for start time'}</td>
+                      <td className="p-2">{cycleWindow.hasWindow ? formatTimeToEnd(cycleWindow.secondsUntilEnd, cycleWindow.ended) : 'Waiting for start time'}</td>
                       <td className="p-2">{fmt(cycle.runsPerHour, 3)}</td>
                       <td className="p-2">{fmt(cycle.runsPerDay, 2)}</td>
                       <td className="p-2">

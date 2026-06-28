@@ -133,7 +133,7 @@ test('recipe tree with nested ingredients', () => {
 
 test('price delta snapshots', () => {
   const storage = new MemoryStorage();
-  const now = new Date('2026-06-28T12:00:00.000Z');
+  const now = new Date();
   const history = savePriceSnapshots([
     { symbol: 'MUD', sellPriceCoin: 1, timestamp: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(), source: 'test', stale: false },
     { symbol: 'MUD', sellPriceCoin: 2, timestamp: now.toISOString(), source: 'test', stale: false },
@@ -181,12 +181,14 @@ test('cycle timer reports remaining time and completed cycles from persisted sta
   assert.equal(Number(status.progressPercent.toFixed(0)), 55);
 });
 
-test('cycle window calculates end time from start and runtime', () => {
-  const window = calculateCycleWindow(10, '2026-06-28T12:00:00.000Z');
+test('cycle window calculates end time and live difference from start and runtime', () => {
+  const window = calculateCycleWindow(10, '2026-06-28T12:00:00.000Z', '2026-06-28T12:04:55.000Z');
   assert.equal(window.hasWindow, true);
   assert.equal(window.startedAt, '2026-06-28T12:00:00.000Z');
   assert.equal(window.endsAt, '2026-06-28T12:10:00.000Z');
   assert.equal(window.durationSeconds, 600);
+  assert.equal(window.secondsUntilEnd, 305);
+  assert.equal(window.ended, false);
 });
 
 test('cycle window marks missing start time as incomplete', () => {
@@ -194,4 +196,13 @@ test('cycle window marks missing start time as incomplete', () => {
   assert.equal(window.hasWindow, false);
   assert.equal(window.endsAt, undefined);
   assert.equal(window.durationSeconds, 600);
+  assert.equal(window.secondsUntilEnd, 600);
+  assert.equal(window.ended, false);
+});
+
+test('cycle window marks elapsed end times as ended', () => {
+  const window = calculateCycleWindow(10, '2026-06-28T12:00:00.000Z', '2026-06-28T12:10:05.000Z');
+  assert.equal(window.hasWindow, true);
+  assert.equal(window.secondsUntilEnd, 0);
+  assert.equal(window.ended, true);
 });
