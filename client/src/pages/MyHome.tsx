@@ -9,7 +9,7 @@ import {
   updateCraftworldIdentity,
 } from '../services/api';
 import { formatDurationFromMinutes, getDurationMinutesFromRunsPerHour, getEffectiveSpeedPercent } from '../services/durationFormat';
-import { getRunsPerHourWithFactoryBoosts, type FactoryBoost } from '../services/factoryBoostModifiers';
+import { getActiveFactoryBoostPercent, getRunsPerHourWithFactoryBoosts, type FactoryBoost } from '../services/factoryBoostModifiers';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
 import { applyWorkshopSpeedToDuration } from '../services/workshopModifiers';
 
@@ -90,17 +90,6 @@ function getFactoryImage(symbol?: string) {
   return factoryImages[symbol.toUpperCase()] || '';
 }
 
-function getDisplayBoostValue(value: number) {
-  return value <= 1 ? value * 100 : value;
-}
-
-function getActiveBoostPercentSum(boosts: FactoryBoost[] = []) {
-  return boosts.reduce((total, boost) => {
-    const value = Number(boost.boostValue || 0);
-    return Number.isFinite(value) && value > 0 ? total + getDisplayBoostValue(value) : total;
-  }, 0);
-}
-
 function formatSpeed(value: number) {
   return `${formatNumber(value)}% / ${formatNumber(value / 100)}x`;
 }
@@ -118,11 +107,11 @@ export default function MyHome() {
   const load = async () => {
     setError('');
     try {
-const [meData, homeData] = await Promise.all([getMe(), getCraftworldHome()]);
+      const [meData, homeData] = await Promise.all([getMe(), getCraftworldHome()]);
       setMe(meData);
       setHome(homeData || {});
 
-try {
+      try {
         const rows = await loadFactoryData();
         setFactoryRows(rows);
       } catch (err) {
@@ -197,7 +186,6 @@ try {
     acc[plotKey].push(factory);
     return acc;
   }, {});
-
 
   const orderedPlots = Object.entries(factoriesByPlot).sort(([plotA], [plotB]) => {
     const indexA = plotDisplayOrder.indexOf(plotA);
@@ -332,9 +320,8 @@ try {
 
                 const activeBoostValues = sortedFactories
                   .flatMap((factory) => factory.activeBoosts || [])
-                  .map((boost) => Number(boost.boostValue || 0))
-                  .filter((value) => value > 0)
-                  .map(getDisplayBoostValue);
+                  .map((boost) => getActiveFactoryBoostPercent([boost]))
+                  .filter((value) => value > 100);
 
                 return (
                   <div key={plotName} className="space-y-2">
@@ -343,7 +330,7 @@ try {
                       <p className="text-xs text-slate-400">
                         {sortedFactories.length} factories • Highest Lv {highestDisplayedLevel} •{' '}
                         {activeBoostValues.length
-                          ? `Active boosts: ${activeBoostValues.map((value) => `${value}%`).join(', ')}`
+                          ? `Active boost speeds: ${activeBoostValues.map((value) => formatSpeed(value)).join(', ')}`
                           : 'No active boost'}
                       </p>
                     </div>
@@ -359,7 +346,7 @@ try {
                         const runsPerHour = factoryRow ? getRunsPerHourWithFactoryBoosts(workshopDuration, factory.activeBoosts || []) : 0;
                         const calculatedDurationMinutes = getDurationMinutesFromRunsPerHour(runsPerHour);
                         const effectiveSpeedPercent = factoryRow ? getEffectiveSpeedPercent(factoryRow.duration_min, calculatedDurationMinutes) : 0;
-                        const boostValue = getActiveBoostPercentSum(factory.activeBoosts || []);
+                        const boostValue = getActiveFactoryBoostPercent(factory.activeBoosts || []);
                         const factoryImage = getFactoryImage(symbol);
 
                         return (
@@ -377,7 +364,7 @@ try {
                                 Lv {displayLevel}
                                 {craftDisplayLevel !== null ? ` • Craft Lv ${craftDisplayLevel}` : ''}
                               </p>
-                              {boostValue > 0 ? <p className="text-slate-400">Boost {formatNumber(boostValue)}%</p> : null}
+                              {boostValue > 100 ? <p className="text-slate-400">Boost Speed: {formatSpeed(boostValue)}</p> : null}
                               {factoryRow ? (
                                 <>
                                   <p className="text-slate-400">Base Time: {formatDurationFromMinutes(factoryRow.duration_min)}</p>
