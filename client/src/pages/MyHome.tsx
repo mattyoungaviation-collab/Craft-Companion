@@ -76,8 +76,10 @@ function displayNumber(value: unknown) {
   return typeof value === 'number' ? value.toLocaleString() : 'Not connected';
 }
 
-function formatNumber(value: unknown) {
-  return typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString() : '0';
+function formatNumber(value: unknown, digits = 3) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value.toLocaleString(undefined, { maximumFractionDigits: digits })
+    : '0';
 }
 
 function ipfsToHttp(url?: string) {
@@ -91,7 +93,7 @@ function getFactoryImage(symbol?: string) {
 }
 
 function formatSpeed(value: number) {
-  return `${formatNumber(value)}% / ${formatNumber(value / 100)}x`;
+  return `${formatNumber(value / 100, 2)}x`;
 }
 
 export default function MyHome() {
@@ -179,7 +181,7 @@ export default function MyHome() {
   );
   const lastSynced = home.lastSyncedAt ? new Date(home.lastSyncedAt).toLocaleString() : 'Not connected';
 
-  const plotDisplayOrder = ['EARTH_PLOT', 'WATER_PLOT', 'FIRE_PLOT', 'BLUEPRINT_PLOT'];
+  const plotDisplayOrder = ['EARTH_PLOT', 'WATER_PLOT', 'FIRE_PLOT', 'BLUEPRINT_PLOT', 'BLUEPRINT_PLOT_B', 'FLEXIBLE_PLOT'];
   const factoriesByPlot = factories.reduce<Record<string, FactorySummary[]>>((acc, factory) => {
     const plotKey = factory.landPlotName || 'Unknown plot';
     if (!acc[plotKey]) acc[plotKey] = [];
@@ -318,20 +320,12 @@ export default function MyHome() {
                   return displayLevel > maxLevel ? displayLevel : maxLevel;
                 }, 0);
 
-                const activeBoostValues = sortedFactories
-                  .flatMap((factory) => factory.activeBoosts || [])
-                  .map((boost) => getActiveFactoryBoostPercent([boost]))
-                  .filter((value) => value > 100);
-
                 return (
                   <div key={plotName} className="space-y-2">
                     <div className="rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2">
                       <p className="text-sm font-semibold">{plotName}</p>
                       <p className="text-xs text-slate-400">
-                        {sortedFactories.length} factories • Highest Lv {highestDisplayedLevel} •{' '}
-                        {activeBoostValues.length
-                          ? `Active boost speeds: ${activeBoostValues.map((value) => formatSpeed(value)).join(', ')}`
-                          : 'No active boost'}
+                        {sortedFactories.length} factories • Highest Lv {highestDisplayedLevel}
                       </p>
                     </div>
 
@@ -346,7 +340,6 @@ export default function MyHome() {
                         const runsPerHour = factoryRow ? getRunsPerHourWithFactoryBoosts(workshopDuration, factory.activeBoosts || []) : 0;
                         const calculatedDurationMinutes = getDurationMinutesFromRunsPerHour(runsPerHour);
                         const effectiveSpeedPercent = factoryRow ? getEffectiveSpeedPercent(factoryRow.duration_min, calculatedDurationMinutes) : 0;
-                        const boostValue = getActiveFactoryBoostPercent(factory.activeBoosts || []);
                         const factoryImage = getFactoryImage(symbol);
 
                         return (
@@ -364,15 +357,14 @@ export default function MyHome() {
                                 Lv {displayLevel}
                                 {craftDisplayLevel !== null ? ` • Craft Lv ${craftDisplayLevel}` : ''}
                               </p>
-                              {boostValue > 100 ? <p className="text-slate-400">Boost Speed: {formatSpeed(boostValue)}</p> : null}
                               {factoryRow ? (
                                 <>
-                                  <p className="text-slate-400">Base Time: {formatDurationFromMinutes(factoryRow.duration_min)}</p>
-                                  <p className="text-slate-400">Output Time: {formatDurationFromMinutes(calculatedDurationMinutes)}</p>
+                                  <p className="text-slate-400">Runtime: {formatDurationFromMinutes(calculatedDurationMinutes)}</p>
                                   <p className="text-slate-400">Speed: {formatSpeed(effectiveSpeedPercent)}</p>
+                                  <p className="text-slate-500">Base: {formatDurationFromMinutes(factoryRow.duration_min)}</p>
                                 </>
                               ) : (
-                                <p className="text-yellow-200">Duration: No CSV match</p>
+                                <p className="text-yellow-200">Runtime: No CSV match</p>
                               )}
                             </div>
                           </div>
