@@ -8,6 +8,8 @@ export default function Layout({ children }: { children: any }) {
         <Link to="/home">Craftworld Companion</Link>
         <div className="space-x-4">
           <Link to="/home">My Home</Link>
+          <Link to="/empire-dashboard">Empire</Link>
+          <Link to="/resource-planner">Planner</Link>
           <Link to="/profitability">Profitability</Link>
           <Link to="/calculator">Calculator</Link>
           <Link to="/inventory-value">Inventory Value</Link>
