@@ -3,9 +3,16 @@ import Card from '../components/Card';
 import Layout from '../components/Layout';
 import { getCraftworldHome } from '../services/api';
 import { formatDurationFromMinutes, getDurationMinutesFromRunsPerHour } from '../services/durationFormat';
-import { getRunsPerHourWithFactoryBoosts, type FactoryBoost } from '../services/factoryBoostModifiers';
+import { type FactoryBoost } from '../services/factoryBoostModifiers';
 import { loadFactoryData, type FactoryDataRow } from '../services/factoryData';
-import { applyWorkshopSpeedToDuration, type WorkshopItem } from '../services/workshopModifiers';
+import {
+  buildRecipeTree,
+  calculateProductionPerHour,
+  calculateTimeUntilResources,
+  flattenRecipeToBaseResources,
+  type RecipeNode,
+} from '../services/craftworldCalculations';
+import { type WorkshopItem } from '../services/workshopModifiers';
 
 type ResourceAmount = { symbol?: string; amount?: number };
 type OwnedFactory = { id?: string; areaSymbol?: string; level?: number; landPlotName?: string; currentRunLevel?: number; activeBoosts?: FactoryBoost[] };
@@ -23,6 +30,8 @@ type PlannerResult = {
   outputPerHour: number;
   outputPerDay: number;
   etaMinutes: number;
+  recipeTree: RecipeNode | null;
+  baseResources: Record<string, number>;
 };
 
 function fmt(value: number, digits = 3) {
@@ -62,9 +71,7 @@ function getBestOwnedProducer(factories: OwnedFactory[], rows: FactoryDataRow[],
 
 function getOutputPerHour(row: FactoryDataRow | null, factory: OwnedFactory | null, workshop: WorkshopItem[]) {
   if (!row || !factory) return 0;
-  const workshopDuration = applyWorkshopSpeedToDuration(row.duration_min, row.token, workshop);
-  const runsPerHour = getRunsPerHourWithFactoryBoosts(workshopDuration, factory.activeBoosts || []);
-  return runsPerHour * row.output_amount;
+  return calculateProductionPerHour(row, { workshop, activeBoosts: factory.activeBoosts || [] });
 }
 
 function uniqueTokens(rows: FactoryDataRow[]) {
@@ -93,7 +100,9 @@ function buildPlannerResult(
   const selectedRow = rows.find((row) => row.output_token === selectedToken && row.level === selectedLevel) || null;
   const producerMatch = getBestOwnedProducer(home?.factories || [], rows, selectedToken);
   const outputPerHour = getOutputPerHour(producerMatch?.row || null, producerMatch?.factory || null, home?.workshop || []);
-  const etaMinutes = neededAmount > 0 && outputPerHour > 0 ? (neededAmount / outputPerHour) * 60 : 0;
+  const eta = calculateTimeUntilResources(targetAmount, ownedAmount, outputPerHour);
+  const recipeTree = selectedRow ? buildRecipeTree(rows, selectedToken, 1, selectedLevel) : null;
+  const baseResources = recipeTree ? flattenRecipeToBaseResources(recipeTree) : {};
 
   return {
     selectedRow,
@@ -106,8 +115,29 @@ function buildPlannerResult(
     producerRow: producerMatch?.row || null,
     outputPerHour,
     outputPerDay: outputPerHour * 24,
-    etaMinutes,
+    etaMinutes: Number.isFinite(eta.hours) ? eta.hours * 60 : Number.POSITIVE_INFINITY,
+    recipeTree,
+    baseResources,
   };
+}
+
+function RecipeTreeView({ node }: { node: RecipeNode }) {
+  return (
+    <div className="space-y-1">
+      <p>
+        {fmt(node.amount)} {node.token}
+        {node.circular ? ' (circular recipe protected)' : ''}
+        {node.missingRecipe ? ' (base or missing recipe)' : ''}
+      </p>
+      {node.children.length > 0 && (
+        <div className="ml-4 border-l border-slate-800 pl-3">
+          {node.children.map((child, index) => (
+            <RecipeTreeView key={`${child.token}-${index}`} node={child} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function ResourcePlanner() {
@@ -235,7 +265,7 @@ export default function ResourcePlanner() {
             )}
           </Card>
 
-          <Card title="Selected Recipe Preview">
+          <Card title="Recipe Tree / Base Resources">
             {result.selectedRow ? (
               <div className="space-y-2 text-sm">
                 <p className="text-lg font-semibold">{result.selectedRow.token} • Level {result.selectedRow.level}</p>
@@ -246,6 +276,17 @@ export default function ResourcePlanner() {
                   <p>Input 2: {fmt(result.selectedRow.input_amount_2)} {result.selectedRow.input_token_2}</p>
                 )}
                 <p>Next upgrade: {fmt(result.selectedRow.upgrade_amount)} {result.selectedRow.upgrade_token}</p>
+                {result.recipeTree && (
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+                    <RecipeTreeView node={result.recipeTree} />
+                  </div>
+                )}
+                <div>
+                  <p className="font-semibold text-slate-200">Base resources for 1 unit</p>
+                  {Object.entries(result.baseResources).map(([token, amount]) => (
+                    <p key={token}>{fmt(amount)} {token}</p>
+                  ))}
+                </div>
               </div>
             ) : (
               <p className="text-sm text-slate-400">No recipe row found for that dropdown selection.</p>

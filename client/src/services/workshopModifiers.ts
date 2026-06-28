@@ -38,8 +38,12 @@ export function getWorkshopUpgradeLevel(symbol: string, workshop: WorkshopItem[]
 
 export function getWorkshopSpeedBoostPercent(symbol: string, workshop: WorkshopItem[]) {
   const tier = getWorkshopTier(symbol);
-  const level = getWorkshopUpgradeLevel(symbol, workshop);
   if (!tier) return 0;
+  const normalized = normalizeSymbol(symbol);
+  const hasWorkshopEntry = workshop.some((entry) => normalizeSymbol(entry.symbol) === normalized);
+  if (!hasWorkshopEntry) return 0;
+
+  const level = getWorkshopUpgradeLevel(symbol, workshop);
 
   // Craft World's returned workshop level represents the owned/current level, while the visible
   // active speed effect corresponds to the next table slot. Example matches from screenshots:

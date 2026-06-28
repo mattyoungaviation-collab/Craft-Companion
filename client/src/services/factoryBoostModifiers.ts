@@ -45,7 +45,7 @@ export function getTotalFactoryBoostMultiplier(boosts: FactoryBoost[] = []) {
 }
 
 export function getActiveFactoryBoostPercent(boosts: FactoryBoost[] = []) {
-  return getTotalFactoryBoostMultiplier(boosts) * 100;
+  return (getTotalFactoryBoostMultiplier(boosts) - 1) * 100;
 }
 
 export function applyFactoryBoostsToDuration(durationMinutes: number, boosts: FactoryBoost[] = []) {

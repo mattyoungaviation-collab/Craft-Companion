@@ -15,6 +15,7 @@ export default function Layout({ children }: { children: any }) {
           <Link to="/inventory-value">Inventory Value</Link>
           <Link to="/upgrade-advisor">Upgrade Advisor</Link>
           <Link to="/matrix">Matrix</Link>
+          <Link to="/settings">Settings</Link>
           <button
             onClick={() => {
               logout();

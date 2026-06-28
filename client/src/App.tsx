@@ -9,6 +9,7 @@ import Matrix from './pages/Matrix';
 import MyHome from './pages/MyHome';
 import Profitability from './pages/Profitability';
 import ResourcePlanner from './pages/ResourcePlanner';
+import Settings from './pages/Settings';
 import SignIn from './pages/SignIn';
 import UpgradeAdvisor from './pages/UpgradeAdvisor';
 
@@ -80,6 +81,14 @@ export default function App() {
           element={(
             <ProtectedRoute>
               <Matrix />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/settings"
+          element={(
+            <ProtectedRoute>
+              <Settings />
             </ProtectedRoute>
           )}
         />
